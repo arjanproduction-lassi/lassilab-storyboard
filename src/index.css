@@ -162,7 +162,7 @@ button {
 }
 
 .dashboard-band p,
-.placeholder-panel p {
+.status-panel p {
   max-width: 680px;
   color: #5f5a50;
   line-height: 1.6;
@@ -176,7 +176,9 @@ button {
 }
 
 .stat-tile,
-.placeholder-panel {
+.action-panel,
+.status-panel,
+.count-tile {
   border: 1px solid #ded5c6;
   border-radius: 8px;
   background: #fffdf8;
@@ -198,12 +200,102 @@ button {
   font-size: 1rem;
 }
 
-.placeholder-panel {
-  padding: 24px;
+.project-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
 }
 
-.placeholder-panel h3 {
+.action-panel {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.action-panel h3 {
+  margin: 0;
   font-size: 1.25rem;
+}
+
+.action-panel label {
+  display: grid;
+  gap: 6px;
+  color: #625c52;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.action-panel input {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid #cfc6b5;
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: #262421;
+  background: #fff;
+}
+
+.action-panel button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #211f1b;
+  background: #e9c768;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.action-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.counts-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.count-tile {
+  display: grid;
+  gap: 6px;
+  min-height: 82px;
+  padding: 16px;
+}
+
+.count-tile strong {
+  font-size: 1.55rem;
+}
+
+.count-tile span {
+  color: #766f62;
+  font-size: 0.84rem;
+}
+
+.status-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px 16px;
+}
+
+.status-panel p {
+  margin: 0;
+}
+
+.runtime-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border-radius: 50%;
+  background: #b86d51;
+}
+
+.runtime-dot.ready {
+  background: #3d8b5f;
 }
 
 .inspector {
@@ -246,6 +338,11 @@ button {
   }
 
   .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-actions,
+  .counts-grid {
     grid-template-columns: 1fr;
   }
 }

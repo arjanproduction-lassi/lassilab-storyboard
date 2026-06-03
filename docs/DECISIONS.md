@@ -36,3 +36,14 @@ Decision: Start with a wide three-panel desktop layout.
 
 Reason: The target workflow involves comparing project structure, production context and item details on a PC screen.
 
+## 007. Project Package V1 Uses Manual Paths
+
+Decision: Project Package v1 accepts an absolute project folder path and creates the managed package there.
+
+Reason: The current Tauri setup does not include a folder picker plugin. Manual absolute paths keep the implementation small while still enabling the first real local project workflow.
+
+## 008. Refuse Non-Empty Folders For New Projects
+
+Decision: Creating a new project refuses non-empty folders unless the user opens an existing Storyboard manifest instead.
+
+Reason: This avoids accidentally mixing managed Storyboard files into unrelated user folders.

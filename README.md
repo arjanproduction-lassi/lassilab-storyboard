@@ -21,7 +21,9 @@ This first pass is only the foundation:
 
 - Vite + React + TypeScript renderer.
 - Minimal Tauri desktop shell.
-- Desktop-first three-panel UI skeleton.
+- Desktop-first three-panel UI.
+- Project Package v1 create/open actions through Tauri commands.
+- Managed project folders and `project.llstory.json` manifest creation.
 - Documentation for product direction, architecture, data model and next tasks.
 - No file import, cloud sync, accounts or AI generation logic.
 
@@ -65,7 +67,7 @@ Tauri requires a Rust toolchain. The renderer can still be developed with Node.j
 docs/                 Product and architecture documentation
 src/                  React renderer
 src-tauri/            Minimal Tauri desktop shell
-project.llstory.json  Future per-project manifest name, documented only for now
+project.llstory.json  Per-project manifest created inside project folders
 ```
 
 ## Out Of Scope For This Pass
@@ -76,4 +78,3 @@ project.llstory.json  Future per-project manifest name, documented only for now
 - Realtime collaboration.
 - AI generation.
 - Persistent project storage beyond the documented manifest concept.
-

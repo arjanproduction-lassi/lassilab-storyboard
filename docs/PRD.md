@@ -36,6 +36,9 @@ This pass establishes:
 - Clean React + TypeScript renderer.
 - Minimal Tauri desktop shell.
 - Wide desktop layout with left navigation, center dashboard and right inspector.
+- Project Package v1 create/open workflow.
+- Managed empty project folder structure.
+- `project.llstory.json` manifest creation and validation.
 - Documentation for product direction, architecture, data model and next tasks.
 - Manifest concept for `project.llstory.json`.
 
@@ -61,4 +64,3 @@ This pass establishes:
 - Version prompts and link them to shots.
 - Track generated outputs and selected hero outputs.
 - Export snapshots that can be manually copied to Google Drive by the user.
-

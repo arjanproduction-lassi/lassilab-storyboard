@@ -10,32 +10,36 @@ project.llstory.json
 
 The manifest and the project folder are the source of truth.
 
-## Minimal Manifest Concept
+## Manifest V1
 
 ```json
 {
   "appName": "Lassi LAB Storyboard",
-  "schemaVersion": "0.1.0",
-  "projectId": "project_2026_0001",
-  "projectTitle": "Pradavny kod",
+  "schemaVersion": 1,
+  "projectId": "llstory_1780509600000_pradavny-kod",
+  "title": "Pradavny kod",
+  "slug": "pradavny-kod",
   "createdAt": "2026-06-03T18:00:00.000Z",
   "updatedAt": "2026-06-03T18:00:00.000Z",
   "text": {
-    "kind": "lyrics",
-    "language": "sk",
-    "sourceAssetId": null,
+    "status": "empty",
+    "assetId": null,
     "notes": ""
   },
   "timing": {
-    "kind": "srt",
-    "sourceAssetId": null,
-    "timecodedMapAssetId": null,
+    "status": "empty",
+    "assetId": null,
     "notes": ""
   },
   "audio": {
-    "primaryAssetId": null,
+    "status": "empty",
+    "assetId": null,
     "durationMs": null,
-    "bpm": null,
+    "notes": ""
+  },
+  "brief": {
+    "summary": "",
+    "visualConcept": "",
     "notes": ""
   },
   "assets": [],
@@ -44,6 +48,21 @@ The manifest and the project folder are the source of truth.
   "prompts": [],
   "outputs": []
 }
+```
+
+## Managed Folder Structure
+
+```text
+01_TEXT/
+02_TIMING/
+03_AUDIO/
+04_BRIEF/
+05_STORYBOARD/
+06_REFERENCES/
+07_PROMPTS/
+08_OUTPUTS/
+09_EXPORTS/
+.thumbs/
 ```
 
 ## Entity Sketches
@@ -125,5 +144,7 @@ Assets describe files copied into the managed project structure.
 - All file paths should be relative to the project folder.
 - IDs should be stable within the project package.
 - Future schema changes should increment `schemaVersion`.
-- Import code must copy files into managed folders and then add manifest entries.
-
+- Create Project writes `project.llstory.json` only when no manifest already exists.
+- Create Project refuses non-empty folders that are not already Storyboard projects.
+- Open Project validates `appName` and `schemaVersion` before displaying metadata.
+- Import code, when added later, must copy files into managed folders and then add manifest entries.
