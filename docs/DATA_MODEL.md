@@ -2,7 +2,7 @@
 
 ## Manifest File
 
-Each production package will use a manifest named:
+Each production package uses a manifest named:
 
 ```text
 project.llstory.json
@@ -21,30 +21,17 @@ The manifest and the project folder are the source of truth.
   "slug": "pradavny-kod",
   "createdAt": "2026-06-03T18:00:00.000Z",
   "updatedAt": "2026-06-03T18:00:00.000Z",
-  "text": {
-    "status": "empty",
-    "assetId": null,
-    "notes": ""
-  },
-  "timing": {
-    "status": "empty",
-    "assetId": null,
-    "notes": ""
-  },
-  "audio": {
-    "status": "empty",
-    "assetId": null,
-    "durationMs": null,
-    "notes": ""
-  },
+  "text": null,
+  "timing": [],
+  "audio": [],
   "brief": {
-    "summary": "",
+    "mainIdea": "",
     "visualConcept": "",
     "notes": ""
   },
-  "assets": [],
   "scenes": [],
   "shots": [],
+  "assets": [],
   "prompts": [],
   "outputs": []
 }
@@ -76,7 +63,7 @@ Assets describe files copied into the managed project structure.
   "id": "asset_001",
   "kind": "source-audio",
   "originalName": "demo.wav",
-  "relativePath": "assets/source/demo.wav",
+  "relativePath": "03_AUDIO/demo.wav",
   "mimeType": "audio/wav",
   "createdAt": "2026-06-03T18:00:00.000Z",
   "notes": ""
@@ -132,7 +119,7 @@ Assets describe files copied into the managed project structure.
   "shotId": "shot_001",
   "promptId": "prompt_001",
   "kind": "image",
-  "relativePath": "assets/generated/output_001.png",
+  "relativePath": "08_OUTPUTS/output_001.png",
   "isHero": false,
   "createdAt": "2026-06-03T18:00:00.000Z",
   "notes": ""

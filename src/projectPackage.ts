@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 
 export type ProjectCounts = {
   scenes: number;
@@ -46,4 +47,18 @@ export function openProjectPackage(folderPath: string) {
       folderPath,
     },
   });
+}
+
+export async function chooseProjectFolder(title: string) {
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    title,
+  });
+
+  if (!selected || Array.isArray(selected)) {
+    return null;
+  }
+
+  return selected;
 }

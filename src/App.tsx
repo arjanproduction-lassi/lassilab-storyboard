@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  chooseProjectFolder,
   createProjectPackage,
   hasDesktopProjectRuntime,
   openProjectPackage,
@@ -36,11 +37,11 @@ const sections: Section[] = [
 ];
 
 const countLabels: Array<[keyof ProjectPackage["counts"], string]> = [
-  ["scenes", "Scény"],
-  ["shots", "Zábery"],
-  ["assets", "Assety"],
-  ["prompts", "Prompty"],
-  ["outputs", "Výstupy"],
+  ["scenes", "Počet scén"],
+  ["shots", "Počet záberov"],
+  ["assets", "Počet assetov"],
+  ["prompts", "Počet promptov"],
+  ["outputs", "Počet výstupov"],
 ];
 
 export default function App() {
@@ -60,16 +61,12 @@ export default function App() {
   const stats = project
     ? [
         { label: "Názov projektu", value: project.title },
-        { label: "Priečinok projektu", value: project.folderPath },
-        { label: "Vytvorené", value: formatDate(project.createdAt) },
-        { label: "Aktualizované", value: formatDate(project.updatedAt) },
-      ]
-    : [
-        { label: "Názov projektu", value: "Nie je otvorený" },
-        { label: "Priečinok projektu", value: "Nie je vybraný" },
+        { label: "Cesta k priečinku", value: project.folderPath },
         { label: "Manifest", value: "project.llstory.json" },
-        { label: "Workflow", value: "Asset → Záber → Prompt → Výstup" },
-      ];
+        { label: "Vytvorené", value: formatDate(project.createdAt) },
+        { label: "Upravené", value: formatDate(project.updatedAt) },
+      ]
+    : [];
 
   async function handleCreateProject(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -77,7 +74,7 @@ export default function App() {
       const createdProject = await createProjectPackage(newProjectTitle, newProjectPath);
       setProject(createdProject);
       setOpenProjectPath(createdProject.folderPath);
-      setStatusMessage("Projektový balík bol vytvorený.");
+      setStatusMessage("Projektový balík bol vytvorený v novom podpriečinku.");
     });
   }
 
@@ -88,6 +85,32 @@ export default function App() {
       setProject(openedProject);
       setNewProjectTitle(openedProject.title);
       setStatusMessage("Projektový balík bol otvorený.");
+    });
+  }
+
+  async function handleChooseNewProjectFolder() {
+    await runProjectAction(async () => {
+      const folderPath = await chooseProjectFolder("Vyber nadradený priečinok pre nový projekt");
+      if (!folderPath) {
+        setStatusMessage("Výber priečinka bol zrušený.");
+        return;
+      }
+
+      setNewProjectPath(folderPath);
+      setStatusMessage("Nadradený priečinok je vybraný. Projekt sa vytvorí v novom podpriečinku.");
+    });
+  }
+
+  async function handleChooseExistingProjectFolder() {
+    await runProjectAction(async () => {
+      const folderPath = await chooseProjectFolder("Vyber existujúci projektový balík");
+      if (!folderPath) {
+        setStatusMessage("Výber priečinka bol zrušený.");
+        return;
+      }
+
+      setOpenProjectPath(folderPath);
+      setStatusMessage("Priečinok existujúceho projektu je vybraný.");
     });
   }
 
@@ -147,19 +170,21 @@ export default function App() {
         <section className="dashboard-band" aria-label="Projektový dashboard">
           <div>
             <p className="eyebrow">Aktívny projekt</p>
-            <h3>{project ? project.title : selectedSection.label}</h3>
-            <p>{project ? project.folderPath : selectedSection.summary}</p>
+            <h3>{project ? project.title : "Žiadny projekt nie je otvorený"}</h3>
+            <p>{project ? project.folderPath : "Vytvor alebo otvor produkčný balík."}</p>
           </div>
         </section>
 
-        <section className="stats-grid" aria-label="Stav projektu">
-          {stats.map((item) => (
-            <div className="stat-tile" key={item.label}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </div>
-          ))}
-        </section>
+        {stats.length > 0 && (
+          <section className="stats-grid" aria-label="Stav projektu">
+            {stats.map((item) => (
+              <div className="stat-tile" key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+              </div>
+            ))}
+          </section>
+        )}
 
         {project && (
           <section className="counts-grid" aria-label="Počty v projektovom balíku">
@@ -174,7 +199,7 @@ export default function App() {
 
         <section className="project-actions" aria-label="Akcie projektového balíka">
           <form className="action-panel" onSubmit={(event) => { void handleCreateProject(event); }}>
-            <h3>Vytvoriť nový projekt</h3>
+            <h3>Nový projektový balík</h3>
             <label>
               <span>Názov projektu</span>
               <input
@@ -184,30 +209,51 @@ export default function App() {
               />
             </label>
             <label>
-              <span>Cesta k priečinku projektu</span>
-              <input
-                value={newProjectPath}
-                onChange={(event) => setNewProjectPath(event.target.value)}
-                placeholder="C:\\Projects\\Pradávny kód"
-              />
+              <span>Nadradený priečinok</span>
+              <span className="path-row">
+                <input
+                  value={newProjectPath}
+                  onChange={(event) => setNewProjectPath(event.target.value)}
+                  placeholder="F:\\Môj disk\\Storyboard projekty"
+                />
+                <button
+                  className="secondary-button"
+                  disabled={isBusy || !canUseProjectRuntime}
+                  onClick={() => { void handleChooseNewProjectFolder(); }}
+                  type="button"
+                >
+                  Vybrať priečinok
+                </button>
+              </span>
+              <span className="field-hint">Projekt sa vytvorí v novom podpriečinku podľa názvu.</span>
             </label>
             <button disabled={isBusy || !canUseProjectRuntime} type="submit">
-              Vytvoriť balík
+              Vytvoriť nový projekt
             </button>
           </form>
 
           <form className="action-panel" onSubmit={(event) => { void handleOpenProject(event); }}>
-            <h3>Otvoriť existujúci projekt</h3>
+            <h3>Existujúci projektový balík</h3>
             <label>
-              <span>Cesta k priečinku projektu</span>
-              <input
-                value={openProjectPath}
-                onChange={(event) => setOpenProjectPath(event.target.value)}
-                placeholder="C:\\Projects\\Pradávny kód"
-              />
+              <span>Cesta k priečinku</span>
+              <span className="path-row">
+                <input
+                  value={openProjectPath}
+                  onChange={(event) => setOpenProjectPath(event.target.value)}
+                  placeholder="C:\\Projects\\Pradávny kód"
+                />
+                <button
+                  className="secondary-button"
+                  disabled={isBusy || !canUseProjectRuntime}
+                  onClick={() => { void handleChooseExistingProjectFolder(); }}
+                  type="button"
+                >
+                  Vybrať priečinok
+                </button>
+              </span>
             </label>
             <button disabled={isBusy || !canUseProjectRuntime} type="submit">
-              Otvoriť balík
+              Otvoriť existujúci projekt
             </button>
           </form>
         </section>
@@ -218,7 +264,7 @@ export default function App() {
         </section>
       </section>
 
-      <aside className="inspector" aria-label="Inspector">
+      <aside className="inspector" aria-label="Inšpektor">
         <p className="eyebrow">Inšpektor</p>
         <h2>{project ? project.title : "Vybraná položka"}</h2>
         <div className="inspector-body">
@@ -227,7 +273,7 @@ export default function App() {
           <span className="field-label">ID projektu</span>
           <strong>{project?.projectId ?? "Žiadny projekt nie je otvorený"}</strong>
           <span className="field-label">Stav</span>
-          <strong>{project ? "Projektový balík je otvorený" : "Zatiaľ iba zástupný obsah"}</strong>
+          <strong>{project ? "Projektový balík je otvorený" : selectedSection.summary}</strong>
           <span className="field-label">Úloha manifestu</span>
           <strong>{project ? `Schéma ${project.schemaVersion}` : "Pripravené pre budúce metadáta"}</strong>
         </div>
@@ -239,5 +285,5 @@ export default function App() {
 function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return date.toLocaleString("sk-SK");
 }

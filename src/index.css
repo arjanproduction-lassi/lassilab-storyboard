@@ -117,6 +117,14 @@ button {
   padding: 32px;
 }
 
+.workspace,
+.dashboard-band,
+.stat-tile,
+.count-tile,
+.inspector {
+  overflow-wrap: anywhere;
+}
+
 .workspace-header {
   display: flex;
   align-items: center;
@@ -170,7 +178,7 @@ button {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px;
   margin: 18px 0;
 }
@@ -187,7 +195,8 @@ button {
 .stat-tile {
   display: grid;
   gap: 8px;
-  min-height: 96px;
+  align-content: start;
+  min-height: 112px;
   padding: 18px;
 }
 
@@ -198,6 +207,7 @@ button {
 
 .stat-tile strong {
   font-size: 1rem;
+  line-height: 1.35;
 }
 
 .project-actions {
@@ -226,6 +236,13 @@ button {
   font-weight: 700;
 }
 
+.field-hint {
+  color: #7c7468;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .action-panel input {
   min-height: 42px;
   width: 100%;
@@ -234,6 +251,12 @@ button {
   padding: 9px 11px;
   color: #262421;
   background: #fff;
+}
+
+.path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
 }
 
 .action-panel button {
@@ -247,6 +270,13 @@ button {
   cursor: pointer;
 }
 
+.action-panel .secondary-button {
+  border: 1px solid #cfc6b5;
+  color: #2d2a26;
+  background: #f7f2e6;
+  white-space: nowrap;
+}
+
 .action-panel button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -254,7 +284,7 @@ button {
 
 .counts-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -319,6 +349,7 @@ button {
 .inspector-body strong {
   margin-bottom: 14px;
   color: #2d2a26;
+  line-height: 1.35;
 }
 
 @media (max-width: 1100px) {
@@ -343,6 +374,10 @@ button {
 
   .project-actions,
   .counts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .path-row {
     grid-template-columns: 1fr;
   }
 }

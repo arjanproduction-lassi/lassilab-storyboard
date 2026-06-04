@@ -65,31 +65,34 @@ struct ProjectCounts {
 fn create_project_package(request: CreateProjectRequest) -> Result<ProjectPackage, String> {
     let title = request.title.trim();
     if title.is_empty() {
-        return Err("Project title is required.".to_string());
+        return Err("Názov projektu je povinný.".to_string());
     }
 
-    let project_dir = normalize_project_dir(&request.folder_path)?;
+    let parent_dir = normalize_project_dir(&request.folder_path)?;
+    validate_parent_project_dir(&parent_dir)?;
+    let slug = slugify(title);
+    let project_dir = parent_dir.join(&slug);
     prepare_new_project_dir(&project_dir)?;
 
     for folder in PACKAGE_DIRS {
         fs::create_dir_all(project_dir.join(folder))
-            .map_err(|error| format!("Could not create {}: {error}", folder))?;
+            .map_err(|error| format!("Nepodarilo sa vytvoriť priečinok {folder}: {error}"))?;
     }
 
     let manifest_path = project_dir.join(MANIFEST_FILE);
-    let manifest = build_manifest(title, &request.timestamp)?;
+    let manifest = build_manifest(title, &slug, &request.timestamp)?;
     let manifest_text = serde_json::to_string_pretty(&manifest)
-        .map_err(|error| format!("Could not serialize manifest: {error}"))?;
+        .map_err(|error| format!("Nepodarilo sa pripraviť manifest: {error}"))?;
 
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&manifest_path)
-        .map_err(|error| format!("Could not create {MANIFEST_FILE}: {error}"))?;
+        .map_err(|error| format!("Nepodarilo sa vytvoriť {MANIFEST_FILE}: {error}"))?;
     file.write_all(manifest_text.as_bytes())
-        .map_err(|error| format!("Could not write {MANIFEST_FILE}: {error}"))?;
+        .map_err(|error| format!("Nepodarilo sa zapísať {MANIFEST_FILE}: {error}"))?;
     file.write_all(b"\n")
-        .map_err(|error| format!("Could not finish {MANIFEST_FILE}: {error}"))?;
+        .map_err(|error| format!("Nepodarilo sa dokončiť {MANIFEST_FILE}: {error}"))?;
 
     manifest_summary(&project_dir, &manifest)
 }
@@ -98,10 +101,10 @@ fn create_project_package(request: CreateProjectRequest) -> Result<ProjectPackag
 fn open_project_package(request: OpenProjectRequest) -> Result<ProjectPackage, String> {
     let project_dir = normalize_project_dir(&request.folder_path)?;
     if !project_dir.exists() {
-        return Err("Project folder does not exist.".to_string());
+        return Err("Priečinok projektu neexistuje.".to_string());
     }
     if !project_dir.is_dir() {
-        return Err("Project path must be a folder.".to_string());
+        return Err("Cesta projektu musí byť priečinok.".to_string());
     }
 
     let manifest = read_manifest(&project_dir)?;
@@ -112,6 +115,7 @@ fn open_project_package(request: OpenProjectRequest) -> Result<ProjectPackage, S
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             create_project_package,
             open_project_package
@@ -123,41 +127,50 @@ pub fn run() {
 fn normalize_project_dir(raw_path: &str) -> Result<PathBuf, String> {
     let trimmed = raw_path.trim();
     if trimmed.is_empty() {
-        return Err("Project folder path is required.".to_string());
+        return Err("Cesta k priečinku projektu je povinná.".to_string());
     }
 
     let path = PathBuf::from(trimmed);
     if !path.is_absolute() {
-        return Err("Project folder path must be absolute.".to_string());
+        return Err("Cesta k priečinku projektu musí byť absolútna.".to_string());
     }
     Ok(path)
+}
+
+fn validate_parent_project_dir(parent_dir: &Path) -> Result<(), String> {
+    if !parent_dir.exists() {
+        return Err("Nadradený priečinok neexistuje.".to_string());
+    }
+    if !parent_dir.is_dir() {
+        return Err("Nadradená cesta musí byť priečinok.".to_string());
+    }
+    Ok(())
 }
 
 fn prepare_new_project_dir(project_dir: &Path) -> Result<(), String> {
     if project_dir.exists() {
         if !project_dir.is_dir() {
-            return Err("Project path already exists and is not a folder.".to_string());
+            return Err("Cieľová cesta projektu už existuje a nie je priečinok.".to_string());
         }
         if project_dir.join(MANIFEST_FILE).exists() {
-            return Err("This folder already contains project.llstory.json. Open it instead.".to_string());
+            return Err("Projekt s týmto názvom už existuje. Otvor ho ako existujúci projekt alebo zmeň názov.".to_string());
         }
         let is_empty = fs::read_dir(project_dir)
-            .map_err(|error| format!("Could not inspect project folder: {error}"))?
+            .map_err(|error| format!("Nepodarilo sa skontrolovať priečinok projektu: {error}"))?
             .next()
             .is_none();
         if !is_empty {
-            return Err("Choose an empty folder or a new folder path for a new project.".to_string());
+            return Err("Cieľový podpriečinok projektu už existuje a nie je prázdny. Zmeň názov projektu alebo vyber iný nadradený priečinok.".to_string());
         }
         return Ok(());
     }
 
     fs::create_dir_all(project_dir)
-        .map_err(|error| format!("Could not create project folder: {error}"))
+        .map_err(|error| format!("Nepodarilo sa vytvoriť podpriečinok projektu: {error}"))
 }
 
-fn build_manifest(title: &str, timestamp: &str) -> Result<Value, String> {
-    let slug = slugify(title);
-    let project_id = make_project_id(&slug)?;
+fn build_manifest(title: &str, slug: &str, timestamp: &str) -> Result<Value, String> {
+    let project_id = make_project_id(slug)?;
 
     Ok(json!({
         "appName": APP_NAME,
@@ -167,24 +180,11 @@ fn build_manifest(title: &str, timestamp: &str) -> Result<Value, String> {
         "slug": slug,
         "createdAt": timestamp,
         "updatedAt": timestamp,
-        "text": {
-            "status": "empty",
-            "assetId": null,
-            "notes": ""
-        },
-        "timing": {
-            "status": "empty",
-            "assetId": null,
-            "notes": ""
-        },
-        "audio": {
-            "status": "empty",
-            "assetId": null,
-            "durationMs": null,
-            "notes": ""
-        },
+        "text": null,
+        "timing": [],
+        "audio": [],
         "brief": {
-            "summary": "",
+            "mainIdea": "",
             "visualConcept": "",
             "notes": ""
         },
@@ -199,13 +199,13 @@ fn build_manifest(title: &str, timestamp: &str) -> Result<Value, String> {
 fn read_manifest(project_dir: &Path) -> Result<Value, String> {
     let manifest_path = project_dir.join(MANIFEST_FILE);
     if !manifest_path.exists() {
-        return Err("project.llstory.json was not found in this folder.".to_string());
+        return Err("V tomto priečinku sa nenašiel project.llstory.json.".to_string());
     }
 
     let manifest_text = fs::read_to_string(&manifest_path)
-        .map_err(|error| format!("Could not read project.llstory.json: {error}"))?;
+        .map_err(|error| format!("Nepodarilo sa načítať project.llstory.json: {error}"))?;
     serde_json::from_str(&manifest_text)
-        .map_err(|error| format!("project.llstory.json is not valid JSON: {error}"))
+        .map_err(|error| format!("project.llstory.json nie je platný JSON: {error}"))
 }
 
 fn validate_manifest(manifest: &Value) -> Result<(), String> {
@@ -214,7 +214,7 @@ fn validate_manifest(manifest: &Value) -> Result<(), String> {
         .and_then(Value::as_str)
         .unwrap_or_default();
     if app_name != APP_NAME {
-        return Err("This manifest does not belong to Lassi LAB Storyboard.".to_string());
+        return Err("Tento manifest nepatrí do Lassi LAB Storyboard.".to_string());
     }
 
     let schema_version = manifest
@@ -223,7 +223,7 @@ fn validate_manifest(manifest: &Value) -> Result<(), String> {
         .unwrap_or_default();
     if schema_version != SCHEMA_VERSION {
         return Err(format!(
-            "Unsupported schemaVersion {schema_version}. Expected {SCHEMA_VERSION}."
+            "Nepodporovaná verzia schemaVersion {schema_version}. Očakávaná verzia je {SCHEMA_VERSION}."
         ));
     }
 
@@ -257,7 +257,7 @@ fn string_field(manifest: &Value, field: &str) -> Result<String, String> {
         .get(field)
         .and_then(Value::as_str)
         .map(ToString::to_string)
-        .ok_or_else(|| format!("Manifest is missing {field}."))
+        .ok_or_else(|| format!("Manifestu chýba pole {field}."))
 }
 
 fn array_count(manifest: &Value, field: &str) -> usize {
@@ -271,7 +271,7 @@ fn array_count(manifest: &Value, field: &str) -> usize {
 fn make_project_id(slug: &str) -> Result<String, String> {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|error| format!("System clock error: {error}"))?
+        .map_err(|error| format!("Chyba systémového času: {error}"))?
         .as_millis();
     Ok(format!("llstory_{millis}_{slug}"))
 }
@@ -285,6 +285,9 @@ fn slugify(title: &str) -> String {
             if lower.is_ascii_alphanumeric() {
                 slug.push(lower);
                 last_dash = false;
+            } else if let Some(mapped) = slovak_ascii_slug(lower) {
+                slug.push_str(mapped);
+                last_dash = false;
             } else if !last_dash {
                 slug.push('-');
                 last_dash = true;
@@ -297,5 +300,25 @@ fn slugify(title: &str) -> String {
         "project".to_string()
     } else {
         trimmed
+    }
+}
+
+fn slovak_ascii_slug(ch: char) -> Option<&'static str> {
+    match ch {
+        'á' | 'ä' => Some("a"),
+        'č' => Some("c"),
+        'ď' => Some("d"),
+        'é' => Some("e"),
+        'í' => Some("i"),
+        'ĺ' | 'ľ' => Some("l"),
+        'ň' => Some("n"),
+        'ó' | 'ô' => Some("o"),
+        'ŕ' => Some("r"),
+        'š' => Some("s"),
+        'ť' => Some("t"),
+        'ú' => Some("u"),
+        'ý' => Some("y"),
+        'ž' => Some("z"),
+        _ => None,
     }
 }
