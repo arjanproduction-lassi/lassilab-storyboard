@@ -37,6 +37,21 @@ struct OpenProjectRequest {
     folder_path: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveTextTimingRequest {
+    folder_path: String,
+    text: ProjectText,
+    timing: Vec<TimingBlock>,
+    timestamp: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadTextTimingFileRequest {
+    file_path: String,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProjectPackage {
@@ -49,7 +64,45 @@ struct ProjectPackage {
     folder_path: String,
     created_at: String,
     updated_at: String,
+    text: ProjectText,
+    timing: Vec<TimingBlock>,
     counts: ProjectCounts,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectText {
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    notes: String,
+    #[serde(default)]
+    updated_at: String,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TimingBlock {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    start: String,
+    #[serde(default)]
+    end: String,
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    section: String,
+    #[serde(default)]
+    voice: String,
+    #[serde(default)]
+    notes: String,
+    #[serde(default)]
+    linked_shot_ids: Vec<String>,
+    #[serde(default)]
+    linked_asset_ids: Vec<String>,
+    #[serde(default)]
+    linked_output_ids: Vec<String>,
 }
 
 #[derive(Default, Serialize)]
@@ -113,13 +166,55 @@ fn open_project_package(request: OpenProjectRequest) -> Result<ProjectPackage, S
     manifest_summary(&project_dir, &manifest)
 }
 
+#[tauri::command]
+fn save_text_timing(request: SaveTextTimingRequest) -> Result<ProjectPackage, String> {
+    let project_dir = normalize_project_dir(&request.folder_path)?;
+    if !project_dir.exists() {
+        return Err("Priečinok projektu neexistuje.".to_string());
+    }
+    if !project_dir.is_dir() {
+        return Err("Cesta projektu musí byť priečinok.".to_string());
+    }
+
+    let timestamp = request.timestamp.trim();
+    if timestamp.is_empty() {
+        return Err("Čas uloženia je povinný.".to_string());
+    }
+
+    let mut manifest = read_manifest(&project_dir)?;
+    validate_manifest(&manifest)?;
+
+    let mut text = request.text;
+    text.updated_at = timestamp.to_string();
+
+    manifest["text"] = serde_json::to_value(text)
+        .map_err(|error| format!("Nepodarilo sa pripraviť text pre manifest: {error}"))?;
+    manifest["timing"] = serde_json::to_value(request.timing)
+        .map_err(|error| format!("Nepodarilo sa pripraviť časovanie pre manifest: {error}"))?;
+    manifest["updatedAt"] = Value::String(timestamp.to_string());
+
+    write_manifest(&project_dir, &manifest)?;
+    manifest_summary(&project_dir, &manifest)
+}
+
+#[tauri::command]
+fn read_text_timing_file(request: ReadTextTimingFileRequest) -> Result<String, String> {
+    let file_path = normalize_import_file_path(&request.file_path)?;
+    validate_text_timing_import_file(&file_path)?;
+
+    fs::read_to_string(&file_path)
+        .map_err(|error| format!("Nepodarilo sa načítať textový alebo SRT súbor: {error}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             create_project_package,
-            open_project_package
+            open_project_package,
+            save_text_timing,
+            read_text_timing_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -145,6 +240,45 @@ fn validate_parent_project_dir(parent_dir: &Path) -> Result<(), String> {
     if !parent_dir.is_dir() {
         return Err("Nadradená cesta musí byť priečinok.".to_string());
     }
+    Ok(())
+}
+
+fn normalize_import_file_path(raw_path: &str) -> Result<PathBuf, String> {
+    let trimmed = raw_path.trim();
+    if trimmed.is_empty() {
+        return Err("Cesta k importovanému súboru je povinná.".to_string());
+    }
+
+    let path = PathBuf::from(trimmed);
+    if !path.is_absolute() {
+        return Err("Cesta k importovanému súboru musí byť absolútna.".to_string());
+    }
+    Ok(path)
+}
+
+fn validate_text_timing_import_file(file_path: &Path) -> Result<(), String> {
+    if !file_path.exists() {
+        return Err("Importovaný súbor neexistuje.".to_string());
+    }
+    if !file_path.is_file() {
+        return Err("Importovaná cesta musí byť súbor.".to_string());
+    }
+
+    let extension = file_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or_default()
+        .to_lowercase();
+    if extension != "txt" && extension != "srt" {
+        return Err("Import podporuje iba súbory .txt alebo .srt.".to_string());
+    }
+
+    let metadata = fs::metadata(file_path)
+        .map_err(|error| format!("Nepodarilo sa skontrolovať importovaný súbor: {error}"))?;
+    if metadata.len() > 2_000_000 {
+        return Err("Importovaný súbor je príliš veľký pre tento prvý import.".to_string());
+    }
+
     Ok(())
 }
 
@@ -209,6 +343,15 @@ fn read_manifest(project_dir: &Path) -> Result<Value, String> {
         .map_err(|error| format!("project.llstory.json nie je platný JSON: {error}"))
 }
 
+fn write_manifest(project_dir: &Path, manifest: &Value) -> Result<(), String> {
+    let manifest_path = project_dir.join(MANIFEST_FILE);
+    let manifest_text = serde_json::to_string_pretty(manifest)
+        .map_err(|error| format!("Nepodarilo sa pripraviť project.llstory.json: {error}"))?;
+
+    fs::write(&manifest_path, format!("{manifest_text}\n"))
+        .map_err(|error| format!("Nepodarilo sa zapísať project.llstory.json: {error}"))
+}
+
 fn validate_manifest(manifest: &Value) -> Result<(), String> {
     let app_name = manifest
         .get("appName")
@@ -244,6 +387,8 @@ fn manifest_summary(project_dir: &Path, manifest: &Value) -> Result<ProjectPacka
         folder_path: project_dir.to_string_lossy().to_string(),
         created_at: string_field(manifest, "createdAt")?,
         updated_at: string_field(manifest, "updatedAt")?,
+        text: text_from_manifest(manifest),
+        timing: timing_from_manifest(manifest),
         counts: ProjectCounts {
             scenes: array_count(manifest, "scenes"),
             shots: array_count(manifest, "shots"),
@@ -252,6 +397,26 @@ fn manifest_summary(project_dir: &Path, manifest: &Value) -> Result<ProjectPacka
             outputs: array_count(manifest, "outputs"),
         },
     })
+}
+
+fn text_from_manifest(manifest: &Value) -> ProjectText {
+    manifest
+        .get("text")
+        .and_then(|text| serde_json::from_value::<ProjectText>(text.clone()).ok())
+        .unwrap_or_default()
+}
+
+fn timing_from_manifest(manifest: &Value) -> Vec<TimingBlock> {
+    manifest
+        .get("timing")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| serde_json::from_value::<TimingBlock>(item.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn parent_folder_path(project_dir: &Path) -> Option<String> {

@@ -37,6 +37,35 @@ The manifest and the project folder are the source of truth.
 }
 ```
 
+`text` may be `null` in a new or older package until the first Text & Timing save. After saving, it is stored as:
+
+```json
+{
+  "body": "",
+  "notes": "",
+  "updatedAt": "2026-06-03T18:10:00.000Z"
+}
+```
+
+`timing` stores simple time-coded text blocks:
+
+```json
+[
+  {
+    "id": "timing_001",
+    "start": "00:00",
+    "end": "00:07",
+    "text": "",
+    "section": "",
+    "voice": "",
+    "notes": "",
+    "linkedShotIds": [],
+    "linkedAssetIds": [],
+    "linkedOutputIds": []
+  }
+]
+```
+
 ## Managed Folder Structure
 
 ```text
@@ -67,6 +96,37 @@ Assets describe files copied into the managed project structure.
   "mimeType": "audio/wav",
   "createdAt": "2026-06-03T18:00:00.000Z",
   "notes": ""
+}
+```
+
+### Text
+
+Project text is the full source text for a song, poem, voiceover, archive narration or other visual storytelling material.
+
+```json
+{
+  "body": "Full project text",
+  "notes": "Text notes, versions or open questions",
+  "updatedAt": "2026-06-03T18:10:00.000Z"
+}
+```
+
+### Timing Block
+
+Timing blocks are lightweight text/time rows. They are not a video timeline. They are meant to prepare later shot, asset and output linking.
+
+```json
+{
+  "id": "timing_001",
+  "start": "00:00",
+  "end": "00:07",
+  "text": "First line",
+  "section": "verse",
+  "voice": "",
+  "notes": "",
+  "linkedShotIds": [],
+  "linkedAssetIds": [],
+  "linkedOutputIds": []
 }
 ```
 
@@ -131,6 +191,9 @@ Assets describe files copied into the managed project structure.
 - All file paths should be relative to the project folder.
 - IDs should be stable within the project package.
 - Future schema changes should increment `schemaVersion`.
+- Text & Timing v1 keeps `schemaVersion` at 1.
+- Saving Text & Timing updates `text`, `timing` and root `updatedAt` while preserving unrelated manifest fields.
+- Text & Timing import reads TXT/SRT or pasted text into editable `timing` blocks; it does not create a separate import entity.
 - Create Project writes `project.llstory.json` only when no manifest already exists.
 - Create Project refuses non-empty folders that are not already Storyboard projects.
 - Open Project validates `appName` and `schemaVersion` before displaying metadata.

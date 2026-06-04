@@ -47,3 +47,15 @@ Reason: The current Tauri setup does not include a folder picker plugin. Manual 
 Decision: Creating a new project refuses non-empty folders unless the user opens an existing Storyboard manifest instead.
 
 Reason: This avoids accidentally mixing managed Storyboard files into unrelated user folders.
+
+## 009. Text And Timing V1 Is A Safe Form-Based Foundation
+
+Decision: Text & Timing v1 should remain a safe form-based foundation, not the final production workspace.
+
+Reason: The first responsibility is reliable local saving, reopening and traceability through `project.llstory.json`. The current large form panels are acceptable for proving the data flow, but future UX should reduce visual noise and give the user more real working space.
+
+## 010. Timeline Editing Comes After Manifest Reliability
+
+Decision: A horizontal timeline-style view is a later pass, not part of the current foundation.
+
+Reason: Timeline zooming, block resizing and editor-like interactions are useful for visual storytelling, but they should be built only after text, timing, import and save/reopen behavior are stable.

@@ -43,3 +43,11 @@
 - Add a clearer user-facing explanation of parent folder vs project folder.
 - Future: text/timing/audio metadata workflow.
 - Future: safe copy-only import.
+
+### UX Direction Note
+
+- Current Text & Timing work is intentionally a safe form-based foundation.
+- This proves local save/reopen behavior before heavier editor interactions.
+- The current large cards and textarea-heavy rows are not the desired final working desk.
+- Future UX should compact project metadata, reduce informational frames and give more space to actual text/timing work.
+- A later Timeline Board can show timing blocks on a horizontal time axis with zoom in/out and future drag/resize editing.

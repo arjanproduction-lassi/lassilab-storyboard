@@ -198,7 +198,11 @@ button {
 .stat-tile,
 .action-panel,
 .status-panel,
-.count-tile {
+.count-tile,
+.save-project-panel,
+.text-editor-panel,
+.timing-panel,
+.section-empty-panel {
   border: 1px solid #ded5c6;
   border-radius: 8px;
   background: #fffdf8;
@@ -279,6 +283,233 @@ button {
 .last-project-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.text-timing-section {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.save-project-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  background: #fffaf0;
+}
+
+.save-project-panel h3 {
+  margin: 4px 0 6px;
+  font-size: 1.25rem;
+}
+
+.save-project-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.save-project-panel p:not(.eyebrow) {
+  margin: 0;
+  color: #5f5a50;
+  line-height: 1.5;
+}
+
+.save-project-panel .last-save-line {
+  margin-top: 6px;
+  color: #2f5d38;
+  font-weight: 800;
+}
+
+.dirty-pill,
+.saved-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.dirty-pill {
+  color: #6d431a;
+  background: #fff0c2;
+}
+
+.saved-pill {
+  color: #245331;
+  background: #eef7eb;
+}
+
+.text-editor-panel,
+.timing-panel,
+.section-empty-panel {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.section-empty-panel p {
+  margin: 0;
+  color: #5f5a50;
+  line-height: 1.6;
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.panel-header h3 {
+  margin: 4px 0 0;
+  font-size: 1.25rem;
+}
+
+.panel-header h4 {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+}
+
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.text-timing-section label {
+  display: grid;
+  gap: 6px;
+  color: #625c52;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.text-timing-section input,
+.text-timing-section textarea {
+  width: 100%;
+  border: 1px solid #cfc6b5;
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: #262421;
+  background: #fff;
+  font: inherit;
+}
+
+.text-timing-section textarea {
+  resize: vertical;
+}
+
+.text-body-input {
+  min-height: 210px;
+}
+
+.text-notes-input {
+  min-height: 76px;
+}
+
+.text-timing-section button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: #211f1b;
+  background: #e9c768;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.text-timing-section .delete-button {
+  border: 1px solid #cfc6b5;
+  color: #2d2a26;
+  background: #f7f2e6;
+}
+
+.text-timing-section .secondary-button {
+  border: 1px solid #cfc6b5;
+  color: #2d2a26;
+  background: #f7f2e6;
+}
+
+.text-timing-section button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.timing-import-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e5dccd;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbf7ec;
+}
+
+.timing-import-input {
+  min-height: 150px;
+  white-space: pre-wrap;
+}
+
+.save-note {
+  margin: 0;
+  border-left: 3px solid #e9c768;
+  padding: 8px 10px;
+  color: #5f5334;
+  background: #fff6d8;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.soft-warning,
+.empty-state {
+  margin: 0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: #665b42;
+  background: #f8f1db;
+  line-height: 1.5;
+}
+
+.empty-state {
+  color: #5f5a50;
+  background: #f6f2ea;
+}
+
+.timing-table {
+  display: grid;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.timing-header,
+.timing-row {
+  display: grid;
+  grid-template-columns: 82px 82px minmax(220px, 2fr) minmax(110px, 1fr) minmax(100px, 1fr) minmax(160px, 1.2fr) 132px;
+  gap: 8px;
+  min-width: 980px;
+}
+
+.timing-header {
+  color: #8b6f34;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.timing-row {
+  align-items: start;
+}
+
+.timing-row textarea {
+  min-height: 70px;
 }
 
 .action-panel {
@@ -438,11 +669,25 @@ button {
 
   .project-actions,
   .counts-grid,
-  .last-project-card {
+  .last-project-card,
+  .panel-header,
+  .save-project-panel {
     grid-template-columns: 1fr;
   }
 
+  .save-project-panel {
+    display: grid;
+  }
+
+  .panel-header {
+    display: grid;
+  }
+
   .last-project-actions {
+    justify-content: flex-start;
+  }
+
+  .panel-actions {
     justify-content: flex-start;
   }
 

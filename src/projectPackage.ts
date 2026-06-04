@@ -9,6 +9,25 @@ export type ProjectCounts = {
   outputs: number;
 };
 
+export type ProjectText = {
+  body: string;
+  notes: string;
+  updatedAt: string;
+};
+
+export type TimingBlock = {
+  id: string;
+  start: string;
+  end: string;
+  text: string;
+  section: string;
+  voice: string;
+  notes: string;
+  linkedShotIds: string[];
+  linkedAssetIds: string[];
+  linkedOutputIds: string[];
+};
+
 export type ProjectPackage = {
   appName: "Lassi LAB Storyboard";
   schemaVersion: 1;
@@ -19,6 +38,8 @@ export type ProjectPackage = {
   folderPath: string;
   createdAt: string;
   updatedAt: string;
+  text: ProjectText;
+  timing: TimingBlock[];
   counts: ProjectCounts;
 };
 
@@ -50,11 +71,50 @@ export function openProjectPackage(folderPath: string) {
   });
 }
 
+export function saveProjectTextTiming(folderPath: string, text: ProjectText, timing: TimingBlock[]) {
+  return invoke<ProjectPackage>("save_text_timing", {
+    request: {
+      folderPath,
+      text,
+      timing,
+      timestamp: new Date().toISOString(),
+    },
+  });
+}
+
+export function readTextTimingImportFile(filePath: string) {
+  return invoke<string>("read_text_timing_file", {
+    request: {
+      filePath,
+    },
+  });
+}
+
 export async function chooseProjectFolder(title: string) {
   const selected = await open({
     directory: true,
     multiple: false,
     title,
+  });
+
+  if (!selected || Array.isArray(selected)) {
+    return null;
+  }
+
+  return selected;
+}
+
+export async function chooseTextTimingImportFile() {
+  const selected = await open({
+    directory: false,
+    filters: [
+      {
+        name: "Text alebo SRT",
+        extensions: ["txt", "srt"],
+      },
+    ],
+    multiple: false,
+    title: "Vyber textový alebo SRT súbor",
   });
 
   if (!selected || Array.isArray(selected)) {
