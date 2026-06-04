@@ -24,6 +24,12 @@ type Section = {
   summary: string;
 };
 
+type StatItem = {
+  label: string;
+  value: string;
+  kind?: "path";
+};
+
 const sections: Section[] = [
   { id: "projects", label: "Projekty", summary: "Lokálne projektové balíky a snapshoty." },
   { id: "brief", label: "Námet", summary: "Kreatívny námet, ciele a obmedzenia." },
@@ -58,10 +64,13 @@ export default function App() {
     [selectedSectionId],
   );
   const canUseProjectRuntime = hasDesktopProjectRuntime();
-  const stats = project
+  const stats: StatItem[] = project
     ? [
         { label: "Názov projektu", value: project.title },
-        { label: "Cesta k priečinku", value: project.folderPath },
+        ...(project.parentFolderPath
+          ? [{ label: "Rodičovský priečinok", value: project.parentFolderPath, kind: "path" as const }]
+          : []),
+        { label: "Projektový priečinok", value: project.folderPath, kind: "path" },
         { label: "Manifest", value: "project.llstory.json" },
         { label: "Vytvorené", value: formatDate(project.createdAt) },
         { label: "Upravené", value: formatDate(project.updatedAt) },
@@ -90,14 +99,14 @@ export default function App() {
 
   async function handleChooseNewProjectFolder() {
     await runProjectAction(async () => {
-      const folderPath = await chooseProjectFolder("Vyber nadradený priečinok pre nový projekt");
+      const folderPath = await chooseProjectFolder("Vyber rodičovský priečinok pre nový projekt");
       if (!folderPath) {
         setStatusMessage("Výber priečinka bol zrušený.");
         return;
       }
 
       setNewProjectPath(folderPath);
-      setStatusMessage("Nadradený priečinok je vybraný. Projekt sa vytvorí v novom podpriečinku.");
+      setStatusMessage("Rodičovský priečinok je vybraný. Projekt sa vytvorí v novom projektovom priečinku.");
     });
   }
 
@@ -171,7 +180,9 @@ export default function App() {
           <div>
             <p className="eyebrow">Aktívny projekt</p>
             <h3>{project ? project.title : "Žiadny projekt nie je otvorený"}</h3>
-            <p>{project ? project.folderPath : "Vytvor alebo otvor produkčný balík."}</p>
+            <p className={project ? "dashboard-path" : undefined}>
+              {project ? project.folderPath : "Vytvor alebo otvor produkčný balík."}
+            </p>
           </div>
         </section>
 
@@ -180,7 +191,9 @@ export default function App() {
             {stats.map((item) => (
               <div className="stat-tile" key={item.label}>
                 <span>{item.label}</span>
-                <strong>{item.value}</strong>
+                <strong className={item.kind === "path" ? "path-value" : undefined} title={item.value}>
+                  {item.value}
+                </strong>
               </div>
             ))}
           </section>
@@ -209,7 +222,7 @@ export default function App() {
               />
             </label>
             <label>
-              <span>Nadradený priečinok</span>
+              <span>Rodičovský priečinok</span>
               <span className="path-row">
                 <input
                   value={newProjectPath}
@@ -225,7 +238,9 @@ export default function App() {
                   Vybrať priečinok
                 </button>
               </span>
-              <span className="field-hint">Projekt sa vytvorí v novom podpriečinku podľa názvu.</span>
+              <span className="field-hint">
+                Vyber rodičovský priečinok. Appka v ňom vytvorí nový projektový priečinok podľa názvu projektu.
+              </span>
             </label>
             <button disabled={isBusy || !canUseProjectRuntime} type="submit">
               Vytvoriť nový projekt

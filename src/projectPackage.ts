@@ -15,6 +15,7 @@ export type ProjectPackage = {
   projectId: string;
   title: string;
   slug: string;
+  parentFolderPath: string | null;
   folderPath: string;
   createdAt: string;
   updatedAt: string;

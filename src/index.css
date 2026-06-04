@@ -176,6 +176,17 @@ button {
   line-height: 1.6;
 }
 
+.dashboard-path,
+.path-value {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.path-value {
+  display: block;
+  max-width: 100%;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

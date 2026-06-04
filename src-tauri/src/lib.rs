@@ -45,6 +45,7 @@ struct ProjectPackage {
     project_id: String,
     title: String,
     slug: String,
+    parent_folder_path: Option<String>,
     folder_path: String,
     created_at: String,
     updated_at: String,
@@ -239,6 +240,7 @@ fn manifest_summary(project_dir: &Path, manifest: &Value) -> Result<ProjectPacka
         project_id: string_field(manifest, "projectId")?,
         title: string_field(manifest, "title")?,
         slug: string_field(manifest, "slug")?,
+        parent_folder_path: parent_folder_path(project_dir),
         folder_path: project_dir.to_string_lossy().to_string(),
         created_at: string_field(manifest, "createdAt")?,
         updated_at: string_field(manifest, "updatedAt")?,
@@ -250,6 +252,12 @@ fn manifest_summary(project_dir: &Path, manifest: &Value) -> Result<ProjectPacka
             outputs: array_count(manifest, "outputs"),
         },
     })
+}
+
+fn parent_folder_path(project_dir: &Path) -> Option<String> {
+    project_dir
+        .parent()
+        .map(|parent| parent.to_string_lossy().to_string())
 }
 
 fn string_field(manifest: &Value, field: &str) -> Result<String, String> {
