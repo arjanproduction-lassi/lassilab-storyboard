@@ -6,6 +6,8 @@
 
 - `foundation-0.1` exists as the first clean foundation tag.
 - `foundation-0.2` exists as the safe Slovak UI baseline tag.
+- `project-package-v1` exists as the first local project package milestone tag.
+- `text-timing-v1` exists as the safe Text & Timing v1 milestone tag.
 - Current work continues from `foundation-0.2`.
 
 ### Completed
@@ -51,3 +53,10 @@
 - The current large cards and textarea-heavy rows are not the desired final working desk.
 - Future UX should compact project metadata, reduce informational frames and give more space to actual text/timing work.
 - A later Timeline Board can show timing blocks on a horizontal time axis with zoom in/out and future drag/resize editing.
+
+### Text & Timing V1 Milestone
+
+- Commit `806545848a579b42389f40b6f33f2bc1ea2b6136` was tagged as `text-timing-v1`.
+- This milestone includes Text & Timing v1, TXT/SRT/copy-paste import into editable timing blocks and the save-state fix.
+- The milestone remains a safe form-based foundation, not the final compact production workspace.
+- `cargo fmt --check` now works after installing the `rustfmt` component.
