@@ -30,6 +30,14 @@ type StatItem = {
   kind?: "path";
 };
 
+type LastProject = {
+  title: string;
+  projectFolderPath: string;
+  lastOpenedAt: string;
+};
+
+const LAST_PROJECT_STORAGE_KEY = "lassiLabStoryboard.lastProject";
+
 const sections: Section[] = [
   { id: "projects", label: "Projekty", summary: "Lokálne projektové balíky a snapshoty." },
   { id: "brief", label: "Námet", summary: "Kreatívny námet, ciele a obmedzenia." },
@@ -53,6 +61,7 @@ const countLabels: Array<[keyof ProjectPackage["counts"], string]> = [
 export default function App() {
   const [selectedSectionId, setSelectedSectionId] = useState<SectionId>("projects");
   const [project, setProject] = useState<ProjectPackage | null>(null);
+  const [lastProject, setLastProject] = useState<LastProject | null>(() => readLastProject());
   const [newProjectTitle, setNewProjectTitle] = useState("Pradávny kód");
   const [newProjectPath, setNewProjectPath] = useState("");
   const [openProjectPath, setOpenProjectPath] = useState("");
@@ -83,6 +92,7 @@ export default function App() {
       const createdProject = await createProjectPackage(newProjectTitle, newProjectPath);
       setProject(createdProject);
       setOpenProjectPath(createdProject.folderPath);
+      rememberProject(createdProject);
       setStatusMessage("Projektový balík bol vytvorený v novom podpriečinku.");
     });
   }
@@ -90,10 +100,22 @@ export default function App() {
   async function handleOpenProject(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await runProjectAction(async () => {
-      const openedProject = await openProjectPackage(openProjectPath);
-      setProject(openedProject);
-      setNewProjectTitle(openedProject.title);
-      setStatusMessage("Projektový balík bol otvorený.");
+      await openProjectFromPath(openProjectPath, "Projektový balík bol otvorený.");
+    });
+  }
+
+  async function handleOpenLastProject() {
+    if (!lastProject) {
+      setStatusMessage("Žiadny posledný projekt nie je uložený.");
+      return;
+    }
+
+    await runProjectAction(async () => {
+      try {
+        await openProjectFromPath(lastProject.projectFolderPath, "Posledný projekt bol otvorený.");
+      } catch {
+        setStatusMessage("Posledný projekt sa nepodarilo otvoriť. Skontroluj, či priečinok stále existuje.");
+      }
     });
   }
 
@@ -138,6 +160,26 @@ export default function App() {
     } finally {
       setIsBusy(false);
     }
+  }
+
+  async function openProjectFromPath(folderPath: string, successMessage: string) {
+    const openedProject = await openProjectPackage(folderPath);
+    setProject(openedProject);
+    setNewProjectTitle(openedProject.title);
+    setOpenProjectPath(openedProject.folderPath);
+    rememberProject(openedProject);
+    setStatusMessage(successMessage);
+  }
+
+  function rememberProject(projectPackage: ProjectPackage) {
+    const savedProject = {
+      title: projectPackage.title,
+      projectFolderPath: projectPackage.folderPath,
+      lastOpenedAt: new Date().toISOString(),
+    };
+
+    setLastProject(savedProject);
+    writeLastProject(savedProject);
   }
 
   return (
@@ -207,6 +249,29 @@ export default function App() {
                 <span>{label}</span>
               </div>
             ))}
+          </section>
+        )}
+
+        {lastProject && !project && (
+          <section className="last-project-card" aria-label="Posledný projekt">
+            <div>
+              <p className="eyebrow">Posledný projekt</p>
+              <h3>{lastProject.title}</h3>
+              <p className="last-project-path">{lastProject.projectFolderPath}</p>
+            </div>
+            <div className="last-project-actions">
+              <button disabled={isBusy || !canUseProjectRuntime} onClick={() => { void handleOpenLastProject(); }} type="button">
+                Otvoriť posledný projekt
+              </button>
+              <button
+                className="secondary-button"
+                disabled={isBusy || !canUseProjectRuntime}
+                onClick={() => { void handleChooseExistingProjectFolder(); }}
+                type="button"
+              >
+                Vybrať iný projekt
+              </button>
+            </div>
           </section>
         )}
 
@@ -301,4 +366,40 @@ function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString("sk-SK");
+}
+
+function readLastProject(): LastProject | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const storedValue = window.localStorage.getItem(LAST_PROJECT_STORAGE_KEY);
+    if (!storedValue) return null;
+
+    const parsedValue = JSON.parse(storedValue) as Partial<LastProject>;
+    if (
+      typeof parsedValue.title !== "string" ||
+      typeof parsedValue.projectFolderPath !== "string" ||
+      typeof parsedValue.lastOpenedAt !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      title: parsedValue.title,
+      projectFolderPath: parsedValue.projectFolderPath,
+      lastOpenedAt: parsedValue.lastOpenedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeLastProject(projectToSave: LastProject) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(LAST_PROJECT_STORAGE_KEY, JSON.stringify(projectToSave));
+  } catch {
+    // Local storage is only a convenience; project packages remain the source of truth.
+  }
 }

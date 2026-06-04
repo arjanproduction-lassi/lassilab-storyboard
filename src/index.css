@@ -177,7 +177,8 @@ button {
 }
 
 .dashboard-path,
-.path-value {
+.path-value,
+.last-project-path {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -226,6 +227,58 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-top: 18px;
+}
+
+.last-project-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  margin-top: 18px;
+  border: 1px solid #ded5c6;
+  border-radius: 8px;
+  padding: 18px;
+  background: #fffdf8;
+}
+
+.last-project-card h3 {
+  margin: 6px 0 8px;
+  font-size: 1.3rem;
+}
+
+.last-project-path {
+  margin: 0;
+  color: #5f5a50;
+  line-height: 1.5;
+}
+
+.last-project-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.last-project-actions button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: #211f1b;
+  background: #e9c768;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.last-project-actions .secondary-button {
+  border: 1px solid #cfc6b5;
+  color: #2d2a26;
+  background: #f7f2e6;
+}
+
+.last-project-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .action-panel {
@@ -384,8 +437,13 @@ button {
   }
 
   .project-actions,
-  .counts-grid {
+  .counts-grid,
+  .last-project-card {
     grid-template-columns: 1fr;
+  }
+
+  .last-project-actions {
+    justify-content: flex-start;
   }
 
   .path-row {
