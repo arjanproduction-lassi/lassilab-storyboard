@@ -24,11 +24,37 @@
 - Keep timing rows dense so more blocks are visible at once.
 - Keep the top toolbar as the compact project/save status strip.
 
+## Completed: Text Timing Sync And Exact Match Tools
+
+- Keep project text editable on the left.
+- Keep timing rows editable in the center list and in the right inspector.
+- Sync selection between project text lines and timing blocks during drafting.
+- Add manual sync helpers: `Prevziať text z riadku` and `Prevziať text z časovania`.
+- Generate, preview and copy clean text from timing blocks.
+- Allow replacing the main project text from timing text only after confirmation.
+- Add strict final match checking between project text and timing text.
+- Add local undo/redo for Text & Timing draft edits.
+
 ## Open Design Note: Text Panel Modes
 
 - Leave the third text mode in practical use for now instead of polishing it endlessly.
 - Future direction may become wider text, larger font, reading mode, hidden notes or linking a text verse with a timing row.
 - Let real project work decide which option is most useful.
+
+## Recommended Next: Test Text & Timing In Practice
+
+- Use real project work to test text matching, exact match checking, undo/redo and text-from-timing replacement.
+- Watch for repeated lines, punctuation differences, long notes and dense timing edits.
+- Do not start Timeline Board, audio playback or media import until the Text & Timing workflow feels reliable.
+
+## Next After Testing: Scenes And Shots V1
+
+- Add scene list.
+- Add shot list.
+- Link shots to existing timing blocks or timing ranges.
+- Keep the project manifest as the source of truth.
+- Keep the implementation small and local-first.
+- Do not implement timeline engine, thumbnails, drag/drop media import or AI generation in this pass.
 
 ## Later: Timeline Board
 
@@ -50,13 +76,6 @@
 - Never move or delete source files.
 - Record original filename, managed relative path and asset kind.
 - Add basic duplicate handling.
-
-## Later: Scenes And Shots
-
-- Add scene list.
-- Add shot list.
-- Link shots to timing ranges.
-- Attach references to shots.
 
 ## Later: Prompt And Output Traceability
 

@@ -111,3 +111,38 @@
 - If the direction feels right, run final safety checks and commit the layout pass.
 - Possible commit message: `Refine Text and Timing desktop workbench layout`.
 - Continue to keep Text & Timing as a safe foundation before implementing Timeline Board, audio playback or media workflows.
+
+### Text Timing Sync And Exact Match Tools
+
+- Commit `d78a8cab382d85bde42ea15b206c29fc2c19b6d6` was pushed to `main` with message `Add Text Timing sync and exact match tools`.
+- Text & Timing now uses the split workbench: project text on the left, editable timing list in the center and selected block inspector on the right.
+- Project text remains an editable full-song/full-poem textarea, not a passive preview.
+- Timing rows remain editable through compact row fields and through the right inspector.
+- Clicking inside the project text can select a matching timing block using practical normalized matching for drafting.
+- The inspector includes manual sync actions: `Prevziať text z riadku` and `Prevziať text z časovania`.
+- Text from timing can be generated, previewed, copied and used to replace the main project text only after confirmation.
+- Final exact match checking was added through `Skontrolovať zhodu textu a časovania`.
+- Final checking is strict: punctuation, letter case, characters, repeated lines and line order must match.
+- Local undo/redo controls were added for the Text & Timing draft state.
+
+### Verified
+
+- `npm run build` passes.
+- `cargo check` passes.
+- `git diff --check` passes.
+- Working tree was clean after push.
+
+### Safety Notes
+
+- No manifest schema changes were made.
+- No Tauri command changes were made.
+- No cloud, account, drag/drop, thumbnail, audio playback, timeline engine or AI generation features were added.
+- No user files are deleted or moved.
+- Main project text is never overwritten from timing text without confirmation.
+
+### Recommended Next Direction
+
+- Test Text & Timing sync in real project work before starting a larger feature.
+- The next recommended feature after that practical testing is `Scenes & Shots v1`.
+- `Scenes & Shots v1` should link scenes and shots to existing timing blocks without changing the manifest more than necessary.
+- Timeline Board, audio playback, DOCX/PDF export and media import should still wait.
