@@ -84,11 +84,16 @@ export default function App() {
   const [textDraft, setTextDraft] = useState<ProjectText>(emptyProjectText);
   const [timingDraft, setTimingDraft] = useState<TimingBlock[]>([]);
   const [timingImportText, setTimingImportText] = useState("");
+  const [selectedTimingBlockId, setSelectedTimingBlockId] = useState<string | null>(null);
+  const [isTimingImportOpen, setIsTimingImportOpen] = useState(false);
+  const [isTextDockOpen, setIsTextDockOpen] = useState(false);
 
   const selectedSection = useMemo(
     () => sections.find((section) => section.id === selectedSectionId) ?? sections[0],
     [selectedSectionId],
   );
+  const isTextTimingWorkspace = selectedSectionId === "text-timing";
+  const showProjectOverview = selectedSectionId === "projects";
   const canUseProjectRuntime = hasDesktopProjectRuntime();
   const stats: StatItem[] = project
     ? [
@@ -111,16 +116,27 @@ export default function App() {
       JSON.stringify(timingBlocksForComparison(timingDraft)) !== JSON.stringify(timingBlocksForComparison(project.timing))
     );
   }, [project, textDraft, timingDraft]);
+  const selectedTimingBlock = useMemo(
+    () => timingDraft.find((block) => block.id === selectedTimingBlockId) ?? null,
+    [selectedTimingBlockId, timingDraft],
+  );
 
   useEffect(() => {
     if (!project) {
       setTextDraft(emptyProjectText);
       setTimingDraft([]);
+      setSelectedTimingBlockId(null);
       return;
     }
 
+    const normalizedTiming = normalizeTimingBlocks(project.timing);
     setTextDraft(normalizeProjectText(project.text));
-    setTimingDraft(normalizeTimingBlocks(project.timing));
+    setTimingDraft(normalizedTiming);
+    setSelectedTimingBlockId((currentId) =>
+      currentId && normalizedTiming.some((block) => block.id === currentId)
+        ? currentId
+        : normalizedTiming[0]?.id ?? null,
+    );
   }, [project]);
 
   useEffect(() => {
@@ -169,20 +185,14 @@ export default function App() {
     });
   }
 
-  async function handleSaveText() {
-    await saveTextTimingDraft("Text bol uložený do manifestu.");
-  }
-
-  async function handleSaveTiming() {
-    await saveTextTimingDraft("Časovanie bolo uložené do manifestu.");
-  }
-
   async function handleSaveProjectTextTiming() {
     await saveTextTimingDraft("Projekt bol uložený do project.llstory.json.");
   }
 
   function handleAddTimingBlock() {
-    setTimingDraft((currentBlocks) => [...currentBlocks, createEmptyTimingBlock()]);
+    const newBlock = createEmptyTimingBlock();
+    setTimingDraft((currentBlocks) => [...currentBlocks, newBlock]);
+    setSelectedTimingBlockId(newBlock.id);
     setStatusMessage("Časový blok bol pridaný. Ulož časovanie, aby sa zapísalo do manifestu.");
   }
 
@@ -197,6 +207,7 @@ export default function App() {
     if (!confirmed) return;
 
     setTimingDraft((currentBlocks) => currentBlocks.filter((block) => block.id !== id));
+    setSelectedTimingBlockId((currentId) => (currentId === id ? null : currentId));
     setStatusMessage("Časový blok bol odstránený z návrhu. Ulož časovanie, aby sa zmena zapísala do manifestu.");
   }
 
@@ -227,6 +238,7 @@ export default function App() {
     }
 
     setTimingDraft((currentBlocks) => [...currentBlocks, ...importResult.blocks]);
+    setSelectedTimingBlockId((currentId) => currentId ?? importResult.blocks[0]?.id ?? null);
     setTextDraft((currentText) =>
       currentText.body.trim() || !importResult.body.trim()
         ? currentText
@@ -339,342 +351,431 @@ export default function App() {
         </nav>
 
         <div className="sidebar-note">
-          <strong>Lokálny produkčný trezor</strong>
-          <span>Bez účtov, bez cloud syncu, bez AI generovania v tomto základe.</span>
+          <strong>Lokálny trezor</strong>
+          <span>Bez účtov, bez cloud syncu, bez AI generovania.</span>
         </div>
       </aside>
 
-      <section className="workspace" aria-label="Storyboard dashboard">
-        <header className="workspace-header">
-          <div>
-            <p className="eyebrow">Základ produkčného balíka</p>
-            <h2>Lassi LAB Storyboard</h2>
+      <section className="main-column" aria-label="Pracovná plocha">
+        <header className="topbar" aria-label="Stav projektu">
+          <div className="topbar-title">
+            <span className="topbar-app">Lassi LAB Storyboard</span>
+            <strong title={project?.title ?? undefined}>{project ? project.title : "Bez otvoreného projektu"}</strong>
+            <span>{selectedSection.label}</span>
           </div>
-          <span className="status-pill">Desktop režim</span>
+          <div className="topbar-actions">
+            <span className={project && hasUnsavedTextTimingChanges ? "dirty-pill" : "saved-pill"}>
+              {project ? (hasUnsavedTextTimingChanges ? "Neuložené zmeny" : "Uložené") : "Bez projektu"}
+            </span>
+            {project && <span className="last-save">Naposledy uložené: {formatDate(project.updatedAt)}</span>}
+            <button
+              disabled={!project || isBusy || !canUseProjectRuntime}
+              onClick={() => { void handleSaveProjectTextTiming(); }}
+              type="button"
+            >
+              Uložiť
+            </button>
+          </div>
         </header>
 
-        <section className="dashboard-band" aria-label="Projektový dashboard">
-          <div>
-            <p className="eyebrow">Aktívny projekt</p>
-            <h3>{project ? project.title : "Žiadny projekt nie je otvorený"}</h3>
-            <p className={project ? "dashboard-path" : undefined}>
-              {project ? project.folderPath : "Vytvor alebo otvor produkčný balík."}
-            </p>
-          </div>
-        </section>
+        <section
+          className={isTextTimingWorkspace ? "workspace workbench-workspace" : "workspace"}
+          aria-label="Aktívna pracovná plocha"
+        >
+          {showProjectOverview && (
+            <>
+              <section className="dashboard-band" aria-label="Projektový dashboard">
+                <div>
+                  <p className="eyebrow">Aktívny projekt</p>
+                  <h3>{project ? project.title : "Žiadny projekt nie je otvorený"}</h3>
+                  <p className={project ? "dashboard-path" : undefined}>
+                    {project ? project.folderPath : "Vytvor alebo otvor produkčný balík."}
+                  </p>
+                </div>
+              </section>
 
-        {stats.length > 0 && (
-          <section className="stats-grid" aria-label="Stav projektu">
-            {stats.map((item) => (
-              <div className="stat-tile" key={item.label}>
-                <span>{item.label}</span>
-                <strong className={item.kind === "path" ? "path-value" : undefined} title={item.value}>
-                  {item.value}
-                </strong>
-              </div>
-            ))}
-          </section>
-        )}
-
-        {project && (
-          <section className="counts-grid" aria-label="Počty v projektovom balíku">
-            {countLabels.map(([key, label]) => (
-              <div className="count-tile" key={key}>
-                <strong>{project.counts[key]}</strong>
-                <span>{label}</span>
-              </div>
-            ))}
-          </section>
-        )}
-
-        {selectedSectionId === "text-timing" && (
-          <section className="text-timing-section" aria-label="Text a časovanie">
-            {project ? (
-              <>
-                <section className="save-project-panel" aria-label="Uloženie projektu">
-                  <div>
-                    <div className="save-project-title">
-                      <div>
-                        <p className="eyebrow">Uloženie</p>
-                        <h3>Uložiť projekt</h3>
-                      </div>
-                      <span className={hasUnsavedTextTimingChanges ? "dirty-pill" : "saved-pill"}>
-                        {hasUnsavedTextTimingChanges ? "Neuložené zmeny" : "Uložené"}
-                      </span>
+              {stats.length > 0 && (
+                <section className="stats-grid" aria-label="Stav projektu">
+                  {stats.map((item) => (
+                    <div className="stat-tile" key={item.label}>
+                      <span>{item.label}</span>
+                      <strong className={item.kind === "path" ? "path-value" : undefined} title={item.value}>
+                        {item.value}
+                      </strong>
                     </div>
-                    <p>Text a časové bloky sa ukladajú do project.llstory.json v otvorenom projektovom priečinku.</p>
-                    <p className="last-save-line">Naposledy uložené: {formatDate(project.updatedAt)}</p>
-                    {hasUnsavedTextTimingChanges && (
-                      <p className="save-note">Pred zatvorením appky alebo otvorením iného projektu klikni na Uložiť projekt.</p>
-                    )}
-                  </div>
-                  <button disabled={isBusy || !canUseProjectRuntime} onClick={() => { void handleSaveProjectTextTiming(); }} type="button">
-                    Uložiť projekt
-                  </button>
+                  ))}
                 </section>
+              )}
 
-                <section className="text-editor-panel" aria-label="Text piesne alebo básne">
-                  <div className="panel-header">
-                    <div>
-                      <p className="eyebrow">Text a časovanie</p>
-                      <h3>Text projektu</h3>
+              {project && (
+                <section className="counts-grid" aria-label="Počty v projektovom balíku">
+                  {countLabels.map(([key, label]) => (
+                    <div className="count-tile" key={key}>
+                      <strong>{project.counts[key]}</strong>
+                      <span>{label}</span>
                     </div>
-                    <button disabled={isBusy || !canUseProjectRuntime} onClick={() => { void handleSaveText(); }} type="button">
-                      Uložiť text
+                  ))}
+                </section>
+              )}
+
+              {lastProject && !project && (
+                <section className="last-project-card" aria-label="Posledný projekt">
+                  <div>
+                    <p className="eyebrow">Posledný projekt</p>
+                    <h3>{lastProject.title}</h3>
+                    <p className="last-project-path">{lastProject.projectFolderPath}</p>
+                  </div>
+                  <div className="last-project-actions">
+                    <button disabled={isBusy || !canUseProjectRuntime} onClick={() => { void handleOpenLastProject(); }} type="button">
+                      Otvoriť posledný projekt
+                    </button>
+                    <button
+                      className="secondary-button"
+                      disabled={isBusy || !canUseProjectRuntime}
+                      onClick={() => { void handleChooseExistingProjectFolder(); }}
+                      type="button"
+                    >
+                      Vybrať iný projekt
                     </button>
                   </div>
-                  <label>
-                    <span>Text piesne / básne</span>
-                    <textarea
-                      className="text-body-input"
-                      value={textDraft.body}
-                      onChange={(event) => setTextDraft((currentText) => ({ ...currentText, body: event.target.value }))}
-                      placeholder="Sem vlož celý text piesne, básne alebo voiceoveru."
-                    />
-                  </label>
-                  <label>
-                    <span>Poznámky k textu</span>
-                    <textarea
-                      className="text-notes-input"
-                      value={textDraft.notes}
-                      onChange={(event) => setTextDraft((currentText) => ({ ...currentText, notes: event.target.value }))}
-                      placeholder="Poznámky, verzie, jazykové úpravy alebo otvorené otázky."
-                    />
-                  </label>
                 </section>
+              )}
 
-                <section className="timing-panel" aria-label="Časové bloky">
-                  <div className="panel-header">
-                    <div>
-                      <p className="eyebrow">Časové bloky</p>
-                      <h3>Riadky a sekcie</h3>
-                    </div>
-                    <div className="panel-actions">
-                      <button disabled={isBusy || !canUseProjectRuntime} onClick={handleAddTimingBlock} type="button">
-                        Pridať časový blok
+              <section className="project-actions" aria-label="Akcie projektového balíka">
+                <form className="action-panel" onSubmit={(event) => { void handleCreateProject(event); }}>
+                  <h3>Nový projektový balík</h3>
+                  <label>
+                    <span>Názov projektu</span>
+                    <input
+                      value={newProjectTitle}
+                      onChange={(event) => setNewProjectTitle(event.target.value)}
+                      placeholder="Pradávny kód"
+                    />
+                  </label>
+                  <label>
+                    <span>Rodičovský priečinok</span>
+                    <span className="path-row">
+                      <input
+                        value={newProjectPath}
+                        onChange={(event) => setNewProjectPath(event.target.value)}
+                        placeholder="F:\\Môj disk\\Storyboard projekty"
+                      />
+                      <button
+                        className="secondary-button"
+                        disabled={isBusy || !canUseProjectRuntime}
+                        onClick={() => { void handleChooseNewProjectFolder(); }}
+                        type="button"
+                      >
+                        Vybrať priečinok
                       </button>
-                      <button disabled={isBusy || !canUseProjectRuntime} onClick={() => { void handleSaveTiming(); }} type="button">
-                        Uložiť časovanie
-                      </button>
-                    </div>
-                  </div>
+                    </span>
+                    <span className="field-hint">
+                      Vyber rodičovský priečinok. Appka v ňom vytvorí nový projektový priečinok podľa názvu projektu.
+                    </span>
+                  </label>
+                  <button disabled={isBusy || !canUseProjectRuntime} type="submit">
+                    Vytvoriť nový projekt
+                  </button>
+                </form>
 
-                  <section className="timing-import-panel" aria-label="Import časovania">
-                    <div className="panel-header compact">
+                <form className="action-panel" onSubmit={(event) => { void handleOpenProject(event); }}>
+                  <h3>Existujúci projektový balík</h3>
+                  <label>
+                    <span>Cesta k priečinku</span>
+                    <span className="path-row">
+                      <input
+                        value={openProjectPath}
+                        onChange={(event) => setOpenProjectPath(event.target.value)}
+                        placeholder="C:\\Projects\\Pradávny kód"
+                      />
+                      <button
+                        className="secondary-button"
+                        disabled={isBusy || !canUseProjectRuntime}
+                        onClick={() => { void handleChooseExistingProjectFolder(); }}
+                        type="button"
+                      >
+                        Vybrať priečinok
+                      </button>
+                    </span>
+                  </label>
+                  <button disabled={isBusy || !canUseProjectRuntime} type="submit">
+                    Otvoriť existujúci projekt
+                  </button>
+                </form>
+              </section>
+            </>
+          )}
+
+          {selectedSectionId === "text-timing" && (
+            <section className="text-timing-section" aria-label="Text a časovanie">
+              {project ? (
+                <>
+                  <section className={isTextDockOpen ? "text-editor-panel text-dock open" : "text-editor-panel text-dock"} aria-label="Text piesne alebo básne">
+                    <div className="panel-header">
                       <div>
-                        <p className="eyebrow">Import</p>
-                        <h4>TXT / SRT / copy-paste</h4>
+                        <p className="eyebrow">Text projektu</p>
+                        <h3>Text piesne / básne</h3>
+                        <p className="dock-summary">
+                          {textDraft.body.trim() ? `${textDraft.body.trim().split(/\s+/).length} slov` : "Text ešte nie je vyplnený"}
+                        </p>
+                      </div>
+                      <button className="secondary-button" onClick={() => setIsTextDockOpen((isOpen) => !isOpen)} type="button">
+                        {isTextDockOpen ? "Skryť text" : "Otvoriť text"}
+                      </button>
+                    </div>
+                    {isTextDockOpen && (
+                      <div className="text-dock-grid">
+                        <label>
+                          <span>Text piesne / básne</span>
+                          <textarea
+                            className="text-body-input"
+                            value={textDraft.body}
+                            onChange={(event) => setTextDraft((currentText) => ({ ...currentText, body: event.target.value }))}
+                            placeholder="Sem vlož celý text piesne, básne alebo voiceoveru."
+                          />
+                        </label>
+                        <label>
+                          <span>Poznámky k textu</span>
+                          <textarea
+                            className="text-notes-input"
+                            value={textDraft.notes}
+                            onChange={(event) => setTextDraft((currentText) => ({ ...currentText, notes: event.target.value }))}
+                            placeholder="Poznámky, verzie, jazykové úpravy alebo otvorené otázky."
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="timing-panel timing-workspace" aria-label="Časové bloky">
+                    <div className="panel-header timing-toolbar">
+                      <div>
+                        <p className="eyebrow">Časové bloky</p>
+                        <h3>Timing list</h3>
+                        <p className="dock-summary">{timingDraft.length} blokov</p>
                       </div>
                       <div className="panel-actions">
                         <button
                           className="secondary-button"
-                          disabled={isBusy || !canUseProjectRuntime}
-                          onClick={() => { void handleChooseTimingImportFile(); }}
+                          onClick={() => setIsTimingImportOpen((isOpen) => !isOpen)}
                           type="button"
                         >
-                          Vybrať TXT/SRT
+                          {isTimingImportOpen ? "Skryť import" : "Import TXT/SRT"}
                         </button>
-                        <button disabled={isBusy || !timingImportText.trim()} onClick={handleImportTimingBlocks} type="button">
-                          Pridať z importu
+                        <button disabled={isBusy || !canUseProjectRuntime} onClick={handleAddTimingBlock} type="button">
+                          Pridať blok
                         </button>
                       </div>
                     </div>
-                    <textarea
-                      className="timing-import-input"
-                      value={timingImportText}
-                      onChange={(event) => setTimingImportText(event.target.value)}
-                      placeholder="Speaker 1 / hlavný vokál&#10;(0:50) Nebo sa zavrelo.&#10;(0:53) Mračná sa kopia."
-                    />
-                    <p className="save-note">
-                      Importné pole je len pracovná plocha. Ak chceš import uložiť do projektu, klikni najprv Pridať z importu a potom Uložiť projekt.
-                    </p>
-                    <p className="field-hint">
-                      Import pridá bloky do návrhu a nič neuloží automaticky. Bloky môžeš upraviť v tabuľke a potom uložiť časovanie.
-                    </p>
-                  </section>
 
-                  {hasIncompleteTiming && (
-                    <p className="soft-warning">Niektoré bloky nemajú vyplnené pole Od alebo Do. V tejto verzii sa dajú uložiť aj tak.</p>
-                  )}
-
-                  {timingDraft.length === 0 ? (
-                    <p className="empty-state">Zatiaľ nie sú pridané žiadne časové bloky.</p>
-                  ) : (
-                    <div className="timing-table" role="table" aria-label="Časovanie textu">
-                      <div className="timing-header" role="row">
-                        <span>Od</span>
-                        <span>Do</span>
-                        <span>Text / riadok</span>
-                        <span>Sekcia</span>
-                        <span>Hlas</span>
-                        <span>Poznámka</span>
-                        <span>Akcie</span>
-                      </div>
-                      {timingDraft.map((block) => (
-                        <div className="timing-row" role="row" key={block.id}>
-                          <input
-                            aria-label="Od"
-                            value={block.start}
-                            onChange={(event) => handleUpdateTimingBlock(block.id, "start", event.target.value)}
-                            placeholder="00:00"
-                          />
-                          <input
-                            aria-label="Do"
-                            value={block.end}
-                            onChange={(event) => handleUpdateTimingBlock(block.id, "end", event.target.value)}
-                            placeholder="00:07"
-                          />
-                          <textarea
-                            aria-label="Text / riadok"
-                            value={block.text}
-                            onChange={(event) => handleUpdateTimingBlock(block.id, "text", event.target.value)}
-                            placeholder="Text riadku alebo obrazu"
-                          />
-                          <input
-                            aria-label="Sekcia"
-                            value={block.section}
-                            onChange={(event) => handleUpdateTimingBlock(block.id, "section", event.target.value)}
-                            placeholder="verš"
-                          />
-                          <input
-                            aria-label="Hlas"
-                            value={block.voice}
-                            onChange={(event) => handleUpdateTimingBlock(block.id, "voice", event.target.value)}
-                            placeholder="hlas"
-                          />
-                          <textarea
-                            aria-label="Poznámka"
-                            value={block.notes}
-                            onChange={(event) => handleUpdateTimingBlock(block.id, "notes", event.target.value)}
-                            placeholder="poznámka"
-                          />
-                          <button
-                            className="delete-button"
-                            disabled={isBusy || !canUseProjectRuntime}
-                            onClick={() => handleDeleteTimingBlock(block.id)}
-                            type="button"
-                          >
-                            Odstrániť blok
-                          </button>
+                    {isTimingImportOpen && (
+                      <section className="timing-import-panel" aria-label="Import časovania">
+                        <div className="panel-header compact">
+                          <div>
+                            <p className="eyebrow">Import</p>
+                            <h4>TXT / SRT / copy-paste</h4>
+                          </div>
+                          <div className="panel-actions">
+                            <button
+                              className="secondary-button"
+                              disabled={isBusy || !canUseProjectRuntime}
+                              onClick={() => { void handleChooseTimingImportFile(); }}
+                              type="button"
+                            >
+                              Vybrať TXT/SRT
+                            </button>
+                            <button disabled={isBusy || !timingImportText.trim()} onClick={handleImportTimingBlocks} type="button">
+                              Pridať z importu
+                            </button>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        <textarea
+                          className="timing-import-input"
+                          value={timingImportText}
+                          onChange={(event) => setTimingImportText(event.target.value)}
+                          placeholder="Speaker 1 / hlavný vokál&#10;(0:50) Nebo sa zavrelo.&#10;(0:53) Mračná sa kopia."
+                        />
+                        <p className="save-note">
+                          Importné pole je len pracovná plocha. Ak chceš import uložiť do projektu, klikni najprv Pridať z importu a potom Uložiť.
+                        </p>
+                      </section>
+                    )}
+
+                    {hasIncompleteTiming && (
+                      <p className="soft-warning">Niektoré bloky nemajú vyplnené pole Od alebo Do. V tejto verzii sa dajú uložiť aj tak.</p>
+                    )}
+
+                    {timingDraft.length === 0 ? (
+                      <p className="empty-state">Zatiaľ nie sú pridané žiadne časové bloky.</p>
+                    ) : (
+                      <div className="timing-table" role="table" aria-label="Časovanie textu">
+                        <div className="timing-header" role="row">
+                          <span>Od</span>
+                          <span>Do</span>
+                          <span>Sekcia</span>
+                          <span>Hlas</span>
+                          <span>Text / riadok</span>
+                          <span>Pozn.</span>
+                          <span>Akcie</span>
+                        </div>
+                        {timingDraft.map((block) => (
+                          <div
+                            aria-selected={block.id === selectedTimingBlockId}
+                            className={block.id === selectedTimingBlockId ? "timing-row active" : "timing-row"}
+                            key={block.id}
+                            onClick={() => setSelectedTimingBlockId(block.id)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setSelectedTimingBlockId(block.id);
+                              }
+                            }}
+                            role="row"
+                            tabIndex={0}
+                          >
+                            <span className="time-cell">{block.start || "—"}</span>
+                            <span className="time-cell">{block.end || "—"}</span>
+                            <span className="compact-cell" title={block.section}>{block.section || "—"}</span>
+                            <span className="compact-cell" title={block.voice}>{block.voice || "—"}</span>
+                            <span className="text-cell" title={block.text}>{block.text || "Bez textu"}</span>
+                            <span className="compact-cell" title={block.notes}>{block.notes || "—"}</span>
+                            <button
+                              className="delete-button"
+                              disabled={isBusy || !canUseProjectRuntime}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleDeleteTimingBlock(block.id);
+                              }}
+                              type="button"
+                            >
+                              Odstrániť
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                </>
+              ) : (
+                <section className="section-empty-panel workbench-empty">
+                  <h3>Najprv vytvor alebo otvor projektový balík.</h3>
+                  <p>Text a časovanie sa ukladajú do project.llstory.json v otvorenom projektovom priečinku.</p>
                 </section>
-              </>
-            ) : (
-              <section className="section-empty-panel">
-                <p>Najprv vytvor alebo otvor projektový balík.</p>
-              </section>
-            )}
-          </section>
-        )}
+              )}
+            </section>
+          )}
 
-        {lastProject && !project && (
-          <section className="last-project-card" aria-label="Posledný projekt">
-            <div>
-              <p className="eyebrow">Posledný projekt</p>
-              <h3>{lastProject.title}</h3>
-              <p className="last-project-path">{lastProject.projectFolderPath}</p>
-            </div>
-            <div className="last-project-actions">
-              <button disabled={isBusy || !canUseProjectRuntime} onClick={() => { void handleOpenLastProject(); }} type="button">
-                Otvoriť posledný projekt
-              </button>
-              <button
-                className="secondary-button"
-                disabled={isBusy || !canUseProjectRuntime}
-                onClick={() => { void handleChooseExistingProjectFolder(); }}
-                type="button"
-              >
-                Vybrať iný projekt
-              </button>
-            </div>
-          </section>
-        )}
-
-        <section className="project-actions" aria-label="Akcie projektového balíka">
-          <form className="action-panel" onSubmit={(event) => { void handleCreateProject(event); }}>
-            <h3>Nový projektový balík</h3>
-            <label>
-              <span>Názov projektu</span>
-              <input
-                value={newProjectTitle}
-                onChange={(event) => setNewProjectTitle(event.target.value)}
-                placeholder="Pradávny kód"
-              />
-            </label>
-            <label>
-              <span>Rodičovský priečinok</span>
-              <span className="path-row">
-                <input
-                  value={newProjectPath}
-                  onChange={(event) => setNewProjectPath(event.target.value)}
-                  placeholder="F:\\Môj disk\\Storyboard projekty"
-                />
-                <button
-                  className="secondary-button"
-                  disabled={isBusy || !canUseProjectRuntime}
-                  onClick={() => { void handleChooseNewProjectFolder(); }}
-                  type="button"
-                >
-                  Vybrať priečinok
-                </button>
-              </span>
-              <span className="field-hint">
-                Vyber rodičovský priečinok. Appka v ňom vytvorí nový projektový priečinok podľa názvu projektu.
-              </span>
-            </label>
-            <button disabled={isBusy || !canUseProjectRuntime} type="submit">
-              Vytvoriť nový projekt
-            </button>
-          </form>
-
-          <form className="action-panel" onSubmit={(event) => { void handleOpenProject(event); }}>
-            <h3>Existujúci projektový balík</h3>
-            <label>
-              <span>Cesta k priečinku</span>
-              <span className="path-row">
-                <input
-                  value={openProjectPath}
-                  onChange={(event) => setOpenProjectPath(event.target.value)}
-                  placeholder="C:\\Projects\\Pradávny kód"
-                />
-                <button
-                  className="secondary-button"
-                  disabled={isBusy || !canUseProjectRuntime}
-                  onClick={() => { void handleChooseExistingProjectFolder(); }}
-                  type="button"
-                >
-                  Vybrať priečinok
-                </button>
-              </span>
-            </label>
-            <button disabled={isBusy || !canUseProjectRuntime} type="submit">
-              Otvoriť existujúci projekt
-            </button>
-          </form>
+          {!showProjectOverview && selectedSectionId !== "text-timing" && (
+            <section className="section-empty-panel workbench-empty">
+              <p className="eyebrow">{selectedSection.label}</p>
+              <h3>{project ? selectedSection.label : "Najprv vytvor alebo otvor projektový balík."}</h3>
+              <p>
+                {project
+                  ? `${selectedSection.summary} Táto pracovná sekcia je pripravená na ďalší pass.`
+                  : "Projektové akcie nájdeš v sekcii Projekty."}
+              </p>
+            </section>
+          )}
         </section>
 
-        <section className="status-panel" aria-label="Stav projektového balíka">
+        <footer className="bottom-dock" aria-label="Stav aplikácie">
           <span className={canUseProjectRuntime ? "runtime-dot ready" : "runtime-dot"} />
-          <p>{statusMessage}</p>
-        </section>
+          <span>{statusMessage}</span>
+          <strong>Spodný dock pripravený pre časovú os a importné stavy.</strong>
+        </footer>
       </section>
 
       <aside className="inspector" aria-label="Inšpektor">
         <p className="eyebrow">Inšpektor</p>
-        <h2>{project ? project.title : "Vybraná položka"}</h2>
-        <div className="inspector-body">
-          <span className="field-label">Sekcia</span>
-          <strong>{selectedSection.label}</strong>
-          <span className="field-label">ID projektu</span>
-          <strong>{project?.projectId ?? "Žiadny projekt nie je otvorený"}</strong>
-          <span className="field-label">Stav</span>
-          <strong>{project ? "Projektový balík je otvorený" : selectedSection.summary}</strong>
-          <span className="field-label">Úloha manifestu</span>
-          <strong>{project ? `Schéma ${project.schemaVersion}` : "Pripravené pre budúce metadáta"}</strong>
-        </div>
+        {project && isTextTimingWorkspace ? (
+          <>
+            <h2>{selectedTimingBlock ? "Vybraný časový blok" : "Text a časovanie"}</h2>
+            {selectedTimingBlock ? (
+              <div className="inspector-body inspector-editor">
+                <div className="inspector-field-row">
+                  <label>
+                    <span className="field-label">Od</span>
+                    <input
+                      value={selectedTimingBlock.start}
+                      onChange={(event) => handleUpdateTimingBlock(selectedTimingBlock.id, "start", event.target.value)}
+                      placeholder="00:00"
+                    />
+                  </label>
+                  <label>
+                    <span className="field-label">Do</span>
+                    <input
+                      value={selectedTimingBlock.end}
+                      onChange={(event) => handleUpdateTimingBlock(selectedTimingBlock.id, "end", event.target.value)}
+                      placeholder="00:07"
+                    />
+                  </label>
+                </div>
+                <label>
+                  <span className="field-label">Text</span>
+                  <textarea
+                    value={selectedTimingBlock.text}
+                    onChange={(event) => handleUpdateTimingBlock(selectedTimingBlock.id, "text", event.target.value)}
+                    placeholder="Text alebo riadok"
+                  />
+                </label>
+                <div className="inspector-field-row">
+                  <label>
+                    <span className="field-label">Sekcia</span>
+                    <input
+                      value={selectedTimingBlock.section}
+                      onChange={(event) => handleUpdateTimingBlock(selectedTimingBlock.id, "section", event.target.value)}
+                      placeholder="verš"
+                    />
+                  </label>
+                  <label>
+                    <span className="field-label">Hlas</span>
+                    <input
+                      value={selectedTimingBlock.voice}
+                      onChange={(event) => handleUpdateTimingBlock(selectedTimingBlock.id, "voice", event.target.value)}
+                      placeholder="hlas"
+                    />
+                  </label>
+                </div>
+                <label>
+                  <span className="field-label">Poznámka</span>
+                  <textarea
+                    value={selectedTimingBlock.notes}
+                    onChange={(event) => handleUpdateTimingBlock(selectedTimingBlock.id, "notes", event.target.value)}
+                    placeholder="Poznámka k bloku"
+                  />
+                </label>
+                <button
+                  className="delete-button"
+                  disabled={isBusy || !canUseProjectRuntime}
+                  onClick={() => handleDeleteTimingBlock(selectedTimingBlock.id)}
+                  type="button"
+                >
+                  Odstrániť blok
+                </button>
+              </div>
+            ) : (
+              <div className="inspector-body">
+                <strong>Vyber časový blok zo zoznamu.</strong>
+                <span className="field-label">Počet blokov</span>
+                <strong>{timingDraft.length}</strong>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <h2>{project ? project.title : "Vybraná položka"}</h2>
+            <div className="inspector-body">
+              <span className="field-label">Sekcia</span>
+              <strong>{selectedSection.label}</strong>
+              <span className="field-label">ID projektu</span>
+              <strong>{project?.projectId ?? "Žiadny projekt nie je otvorený"}</strong>
+              <span className="field-label">Stav</span>
+              <strong>{project ? "Projektový balík je otvorený" : selectedSection.summary}</strong>
+              <span className="field-label">Úloha manifestu</span>
+              <strong>{project ? `Schéma ${project.schemaVersion}` : "Pripravené pre budúce metadáta"}</strong>
+            </div>
+          </>
+        )}
       </aside>
     </main>
   );
