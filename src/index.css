@@ -198,6 +198,12 @@ button:disabled {
   font-weight: 800;
 }
 
+.topbar-actions .toolbar-secondary-button {
+  border: 1px solid #cfc6b5;
+  color: #2d2a26;
+  background: #f7f2e6;
+}
+
 .secondary-button,
 .text-timing-section .secondary-button,
 .action-panel .secondary-button,
@@ -516,7 +522,8 @@ button:disabled {
 .timing-workspace {
   border: 0;
   background: transparent;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -602,7 +609,6 @@ button:disabled {
 
 .timing-import-panel {
   display: grid;
-  grid-row: 2;
   gap: 8px;
   border: 1px solid #e5dccd;
   border-radius: 6px;
@@ -610,9 +616,61 @@ button:disabled {
   background: #fbf7ec;
 }
 
-.timing-import-input {
+.timing-text-preview-panel {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 7px;
+  border: 1px solid #e5dccd;
+  border-radius: 6px;
+  padding: 7px;
+  background: #fbfaf5;
+}
+
+.final-match-panel {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 4px;
+  border-radius: 6px;
+  padding: 7px 8px;
+  color: #3f392f;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.final-match-panel.exact {
+  border: 1px solid #bad2b3;
+  background: #eef7eb;
+}
+
+.final-match-panel.mismatch {
+  border: 1px solid #ead28c;
+  background: #fff4cc;
+}
+
+.final-match-panel strong {
+  color: #262421;
+}
+
+.final-match-panel span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.final-match-panel button {
+  justify-self: start;
+  margin-top: 2px;
+}
+
+.timing-import-input,
+.timing-text-preview-input {
   min-height: 68px;
   white-space: pre-wrap;
+}
+
+.timing-text-preview-input {
+  max-height: 140px;
+  resize: vertical;
 }
 
 .save-note {
@@ -636,14 +694,6 @@ button:disabled {
   line-height: 1.4;
 }
 
-.timing-workspace > .soft-warning {
-  grid-row: 3;
-}
-
-.timing-workspace > .empty-state {
-  grid-row: 4;
-}
-
 .empty-state {
   color: #5f5a50;
   background: #f6f2ea;
@@ -651,7 +701,7 @@ button:disabled {
 
 .timing-table {
   display: grid;
-  grid-row: 4;
+  flex: 1 1 auto;
   gap: 1px;
   min-width: 0;
   min-height: 0;
@@ -699,9 +749,15 @@ button:disabled {
 .timing-row.active {
   border-color: #d7ae45;
   background: #fff0bf;
+  box-shadow: inset 3px 0 0 #d7ae45;
 }
 
-.timing-row span {
+.timing-row.active .text-cell {
+  color: #1f1d1a;
+}
+
+.timing-row span,
+.timing-row input {
   min-width: 0;
   overflow: hidden;
   color: #2d2a26;
@@ -709,6 +765,21 @@ button:disabled {
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.timing-row .timing-row-input {
+  height: 23px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 1px 4px;
+  background: transparent;
+}
+
+.timing-row .timing-row-input:hover,
+.timing-row .timing-row-input:focus {
+  border-color: #d8c9ad;
+  outline: 0;
+  background: #fffdf8;
 }
 
 .time-cell {
@@ -803,6 +874,26 @@ button:disabled {
 
 .inspector-editor {
   gap: 8px;
+}
+
+.sync-tools {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #ded5c6;
+  border-radius: 6px;
+  padding: 7px;
+  background: #fffdf8;
+}
+
+.sync-tools p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: #5f5a50;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .inspector-editor textarea {

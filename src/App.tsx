@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   chooseTextTimingImportFile,
   chooseProjectFolder,
@@ -42,10 +42,33 @@ type LastProject = {
   lastOpenedAt: string;
 };
 
+type TextLineSelection = {
+  start: number;
+  end: number;
+  text: string;
+  normalizedText: string;
+  occurrence: number;
+};
+
+type FinalTextTimingCheck = {
+  exact: boolean;
+  firstMismatchLine: number | null;
+  projectLine: string;
+  timingLine: string;
+};
+
+type DraftSnapshot = {
+  textDraft: ProjectText;
+  timingDraft: TimingBlock[];
+  selectedTimingBlockId: string | null;
+  lastClickedTextLine: TextLineSelection | null;
+};
+
 type TimingEditableField = "start" | "end" | "text" | "section" | "voice" | "notes";
 type TextPanelMode = "hidden" | "compact" | "expanded";
 
 const LAST_PROJECT_STORAGE_KEY = "lassiLabStoryboard.lastProject";
+const DRAFT_HISTORY_LIMIT = 40;
 
 const emptyProjectText: ProjectText = {
   body: "",
@@ -88,6 +111,14 @@ export default function App() {
   const [selectedTimingBlockId, setSelectedTimingBlockId] = useState<string | null>(null);
   const [isTimingImportOpen, setIsTimingImportOpen] = useState(false);
   const [textPanelMode, setTextPanelMode] = useState<TextPanelMode>("compact");
+  const [lastClickedTextLine, setLastClickedTextLine] = useState<TextLineSelection | null>(null);
+  const [isTimingTextPreviewOpen, setIsTimingTextPreviewOpen] = useState(false);
+  const [finalTextTimingCheck, setFinalTextTimingCheck] = useState<FinalTextTimingCheck | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const textBodyInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const timingRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const undoStackRef = useRef<DraftSnapshot[]>([]);
+  const redoStackRef = useRef<DraftSnapshot[]>([]);
 
   const selectedSection = useMemo(
     () => sections.find((section) => section.id === selectedSectionId) ?? sections[0],
@@ -121,18 +152,30 @@ export default function App() {
     () => timingDraft.find((block) => block.id === selectedTimingBlockId) ?? null,
     [selectedTimingBlockId, timingDraft],
   );
+  const generatedTimingText = useMemo(() => buildExactTextFromTiming(timingDraft), [timingDraft]);
+  const canUndoDraft = undoStackRef.current.length > 0;
+  const canRedoDraft = redoStackRef.current.length > 0;
+  void historyVersion;
 
   useEffect(() => {
     if (!project) {
       setTextDraft(emptyProjectText);
       setTimingDraft([]);
       setSelectedTimingBlockId(null);
+      setLastClickedTextLine(null);
+      setIsTimingTextPreviewOpen(false);
+      setFinalTextTimingCheck(null);
+      clearDraftHistory();
       return;
     }
 
     const normalizedTiming = normalizeTimingBlocks(project.timing);
     setTextDraft(normalizeProjectText(project.text));
     setTimingDraft(normalizedTiming);
+    setLastClickedTextLine(null);
+    setIsTimingTextPreviewOpen(false);
+    setFinalTextTimingCheck(null);
+    clearDraftHistory();
     setSelectedTimingBlockId((currentId) =>
       currentId && normalizedTiming.some((block) => block.id === currentId)
         ? currentId
@@ -151,6 +194,15 @@ export default function App() {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedTextTimingChanges]);
+
+  useEffect(() => {
+    if (!selectedTimingBlockId || selectedSectionId !== "text-timing") return;
+
+    timingRowRefs.current[selectedTimingBlockId]?.scrollIntoView({
+      block: "nearest",
+      behavior: "smooth",
+    });
+  }, [selectedSectionId, selectedTimingBlockId]);
 
   async function handleCreateProject(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -190,7 +242,62 @@ export default function App() {
     await saveTextTimingDraft("Projekt bol uložený do project.llstory.json.");
   }
 
+  function recordDraftHistory() {
+    if (!project) return;
+
+    const snapshot = makeDraftSnapshot(textDraft, timingDraft, selectedTimingBlockId, lastClickedTextLine);
+    const lastSnapshot = undoStackRef.current[undoStackRef.current.length - 1];
+    if (lastSnapshot && draftSnapshotsAreEqual(lastSnapshot, snapshot)) return;
+
+    undoStackRef.current = [...undoStackRef.current, snapshot].slice(-DRAFT_HISTORY_LIMIT);
+    redoStackRef.current = [];
+    setHistoryVersion((version) => version + 1);
+  }
+
+  function clearDraftHistory() {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setHistoryVersion((version) => version + 1);
+  }
+
+  function applyDraftSnapshot(snapshot: DraftSnapshot) {
+    setTextDraft(snapshot.textDraft);
+    setTimingDraft(snapshot.timingDraft);
+    setSelectedTimingBlockId(snapshot.selectedTimingBlockId);
+    setLastClickedTextLine(snapshot.lastClickedTextLine);
+    setFinalTextTimingCheck(null);
+  }
+
+  function handleUndoDraft() {
+    const previousSnapshot = undoStackRef.current[undoStackRef.current.length - 1];
+    if (!previousSnapshot) return;
+
+    undoStackRef.current = undoStackRef.current.slice(0, -1);
+    redoStackRef.current = [
+      ...redoStackRef.current,
+      makeDraftSnapshot(textDraft, timingDraft, selectedTimingBlockId, lastClickedTextLine),
+    ].slice(-DRAFT_HISTORY_LIMIT);
+    applyDraftSnapshot(previousSnapshot);
+    setHistoryVersion((version) => version + 1);
+    setStatusMessage("Posledná zmena bola vrátená späť.");
+  }
+
+  function handleRedoDraft() {
+    const nextSnapshot = redoStackRef.current[redoStackRef.current.length - 1];
+    if (!nextSnapshot) return;
+
+    redoStackRef.current = redoStackRef.current.slice(0, -1);
+    undoStackRef.current = [
+      ...undoStackRef.current,
+      makeDraftSnapshot(textDraft, timingDraft, selectedTimingBlockId, lastClickedTextLine),
+    ].slice(-DRAFT_HISTORY_LIMIT);
+    applyDraftSnapshot(nextSnapshot);
+    setHistoryVersion((version) => version + 1);
+    setStatusMessage("Vrátená zmena bola obnovená.");
+  }
+
   function handleAddTimingBlock() {
+    recordDraftHistory();
     const newBlock = createEmptyTimingBlock();
     setTimingDraft((currentBlocks) => [...currentBlocks, newBlock]);
     setSelectedTimingBlockId(newBlock.id);
@@ -198,15 +305,141 @@ export default function App() {
   }
 
   function handleUpdateTimingBlock(id: string, field: TimingEditableField, value: string) {
+    recordDraftHistory();
+    setFinalTextTimingCheck(null);
     setTimingDraft((currentBlocks) =>
       currentBlocks.map((block) => (block.id === id ? { ...block, [field]: value } : block)),
     );
+  }
+
+  function handleUpdateProjectTextBody(value: string) {
+    recordDraftHistory();
+    setFinalTextTimingCheck(null);
+    setTextDraft((currentText) => ({ ...currentText, body: value }));
+  }
+
+  function handleUpdateProjectTextNotes(value: string) {
+    recordDraftHistory();
+    setTextDraft((currentText) => ({ ...currentText, notes: value }));
+  }
+
+  function handleSelectTimingBlock(block: TimingBlock) {
+    setSelectedTimingBlockId(block.id);
+    scrollTextToTimingBlock(block);
+  }
+
+  function handleTextBodyClick(event: React.MouseEvent<HTMLTextAreaElement>) {
+    const line = getTextLineSelectionAtCaret(event.currentTarget.value, event.currentTarget.selectionStart);
+    setLastClickedTextLine(line);
+    if (!line.normalizedText) return;
+
+    const matchingBlock = findTimingBlockForTextLine(line, timingDraft, selectedTimingBlockId);
+    if (!matchingBlock) {
+      setStatusMessage("Nenašiel sa zodpovedajúci časový blok.");
+      return;
+    }
+
+    setSelectedTimingBlockId(matchingBlock.id);
+    setStatusMessage("Časový blok podľa textového riadku bol vybraný.");
+  }
+
+  function scrollTextToTimingBlock(block: TimingBlock) {
+    if (textPanelMode === "hidden") return;
+
+    const textarea = textBodyInputRef.current;
+    const normalizedText = normalizeTextLineForMatch(block.text);
+    if (!textarea || !normalizedText) return;
+
+    const matchingLine = findTextLineRange(textarea.value, normalizedText);
+    if (!matchingLine) return;
+
+    window.requestAnimationFrame(() => {
+      textarea.setSelectionRange(matchingLine.start, matchingLine.end);
+      scrollTextareaToLine(textarea, matchingLine.start);
+    });
+  }
+
+  function handleUseClickedLineInTimingBlock() {
+    if (!selectedTimingBlock || !lastClickedTextLine?.text.trim()) {
+      setStatusMessage("Najprv vyber časový blok a klikni na riadok v texte.");
+      return;
+    }
+
+    handleUpdateTimingBlock(selectedTimingBlock.id, "text", lastClickedTextLine.text.trim());
+    setStatusMessage("Text riadku bol prevzatý do časového bloku.");
+  }
+
+  function handleUseTimingBlockInProjectText() {
+    if (!selectedTimingBlock?.text.trim() || !lastClickedTextLine) {
+      setStatusMessage("Najprv vyber časový blok a klikni na riadok v texte.");
+      return;
+    }
+
+    const replacedText = replaceSelectedTextLine(textDraft.body, lastClickedTextLine, selectedTimingBlock.text.trim());
+    if (!replacedText) {
+      setStatusMessage("Riadok v hlavnom texte sa nepodarilo bezpečne nájsť.");
+      return;
+    }
+
+    recordDraftHistory();
+    setTextDraft((currentText) => ({ ...currentText, body: replacedText.body }));
+    setLastClickedTextLine(replacedText.selection);
+    setStatusMessage("Text z časovania bol prevzatý do hlavného textu. Ulož projekt, aby sa zmena zapísala.");
+  }
+
+  function handlePrepareTextFromTiming() {
+    setIsTimingTextPreviewOpen(true);
+    setStatusMessage(
+      generatedTimingText.trim()
+        ? "Text z časovania bol pripravený ako návrh."
+        : "Časovanie zatiaľ neobsahuje text pre návrh.",
+    );
+  }
+
+  function handleCheckFinalTextTimingMatch() {
+    const checkResult = compareProjectTextWithTimingText(textDraft.body, generatedTimingText);
+    setFinalTextTimingCheck(checkResult);
+    setStatusMessage(
+      checkResult.exact
+        ? "Text a časovanie sedia presne."
+        : "Text a časovanie sa líšia. Pred finálnym exportom ich zosúlaď.",
+    );
+  }
+
+  function handleReplaceMainTextFromTiming() {
+    if (!generatedTimingText.trim()) {
+      setStatusMessage("Časovanie zatiaľ neobsahuje text pre návrh.");
+      return;
+    }
+
+    const confirmed = window.confirm("Nahradiť hlavný text textom z časovania? Zmena sa zapíše až po kliknutí na Uložiť.");
+    if (!confirmed) return;
+
+    recordDraftHistory();
+    setTextDraft((currentText) => ({ ...currentText, body: generatedTimingText }));
+    setFinalTextTimingCheck(null);
+    setStatusMessage("Hlavný text bol nahradený návrhom z časovania. Ulož projekt, aby sa zmena zapísala.");
+  }
+
+  async function handleCopyGeneratedTimingText() {
+    if (!generatedTimingText.trim()) {
+      setStatusMessage("Časovanie zatiaľ neobsahuje text na kopírovanie.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(generatedTimingText);
+      setStatusMessage("Text z časovania bol skopírovaný do schránky.");
+    } catch {
+      setStatusMessage("Kopírovanie cez schránku nie je dostupné. Text ostáva v náhľade a dá sa označiť ručne.");
+    }
   }
 
   function handleDeleteTimingBlock(id: string) {
     const confirmed = window.confirm("Odstrániť tento časový blok?");
     if (!confirmed) return;
 
+    recordDraftHistory();
     setTimingDraft((currentBlocks) => currentBlocks.filter((block) => block.id !== id));
     setSelectedTimingBlockId((currentId) => (currentId === id ? null : currentId));
     setStatusMessage("Časový blok bol odstránený z návrhu. Ulož časovanie, aby sa zmena zapísala do manifestu.");
@@ -238,6 +471,7 @@ export default function App() {
       return;
     }
 
+    recordDraftHistory();
     setTimingDraft((currentBlocks) => [...currentBlocks, ...importResult.blocks]);
     setSelectedTimingBlockId((currentId) => currentId ?? importResult.blocks[0]?.id ?? null);
     setTextDraft((currentText) =>
@@ -369,6 +603,26 @@ export default function App() {
               {project ? (hasUnsavedTextTimingChanges ? "Neuložené zmeny" : "Uložené") : "Bez projektu"}
             </span>
             {project && <span className="last-save">Naposledy uložené: {formatDate(project.updatedAt)}</span>}
+            {project && isTextTimingWorkspace && (
+              <>
+                <button
+                  className="toolbar-secondary-button"
+                  disabled={!canUndoDraft}
+                  onClick={handleUndoDraft}
+                  type="button"
+                >
+                  Späť
+                </button>
+                <button
+                  className="toolbar-secondary-button"
+                  disabled={!canRedoDraft}
+                  onClick={handleRedoDraft}
+                  type="button"
+                >
+                  Znova
+                </button>
+              </>
+            )}
             <button
               disabled={!project || isBusy || !canUseProjectRuntime}
               onClick={() => { void handleSaveProjectTextTiming(); }}
@@ -553,8 +807,10 @@ export default function App() {
                           <span>Text piesne / básne</span>
                           <textarea
                             className="text-body-input"
+                            ref={textBodyInputRef}
                             value={textDraft.body}
-                            onChange={(event) => setTextDraft((currentText) => ({ ...currentText, body: event.target.value }))}
+                            onClick={handleTextBodyClick}
+                            onChange={(event) => handleUpdateProjectTextBody(event.target.value)}
                             placeholder="Sem vlož celý text piesne, básne alebo voiceoveru."
                           />
                         </label>
@@ -563,7 +819,7 @@ export default function App() {
                           <textarea
                             className="text-notes-input"
                             value={textDraft.notes}
-                            onChange={(event) => setTextDraft((currentText) => ({ ...currentText, notes: event.target.value }))}
+                            onChange={(event) => handleUpdateProjectTextNotes(event.target.value)}
                             placeholder="Poznámky, verzie, jazykové úpravy alebo otvorené otázky."
                           />
                         </label>
@@ -579,6 +835,22 @@ export default function App() {
                         <p className="dock-summary">{timingDraft.length} blokov</p>
                       </div>
                       <div className="panel-actions">
+                        <button
+                          className="secondary-button"
+                          disabled={timingDraft.length === 0}
+                          onClick={handlePrepareTextFromTiming}
+                          type="button"
+                        >
+                          Vytvoriť text z časovania
+                        </button>
+                        <button
+                          className="secondary-button"
+                          disabled={timingDraft.length === 0}
+                          onClick={handleCheckFinalTextTimingMatch}
+                          type="button"
+                        >
+                          Skontrolovať zhodu textu a časovania
+                        </button>
                         <button
                           className="secondary-button"
                           onClick={() => setIsTimingImportOpen((isOpen) => !isOpen)}
@@ -625,6 +897,69 @@ export default function App() {
                       </section>
                     )}
 
+                    {isTimingTextPreviewOpen && (
+                      <section className="timing-text-preview-panel" aria-label="Náhľad textu z časovania">
+                        <div className="panel-header compact">
+                          <div>
+                            <p className="eyebrow">Náhľad textu z časovania</p>
+                            <h4>Text z timing blokov</h4>
+                          </div>
+                          <div className="panel-actions">
+                            <button
+                              className="secondary-button"
+                              disabled={!generatedTimingText.trim()}
+                              onClick={() => { void handleCopyGeneratedTimingText(); }}
+                              type="button"
+                            >
+                              Kopírovať text
+                            </button>
+                            <button
+                              disabled={!generatedTimingText.trim()}
+                              onClick={handleReplaceMainTextFromTiming}
+                              type="button"
+                            >
+                              Nahradiť hlavný text textom z časovania
+                            </button>
+                          </div>
+                        </div>
+                        <textarea
+                          className="timing-text-preview-input"
+                          readOnly
+                          value={generatedTimingText}
+                          placeholder="Text z časovania sa zobrazí tu."
+                        />
+                        <p className="save-note">
+                          Návrh nič neprepisuje automaticky. Hlavný text sa zmení až po potvrdení a uloží sa až cez Uložiť.
+                        </p>
+                      </section>
+                    )}
+
+                    {finalTextTimingCheck && (
+                      <section
+                        className={finalTextTimingCheck.exact ? "final-match-panel exact" : "final-match-panel mismatch"}
+                        aria-label="Finálna zhoda textu a časovania"
+                      >
+                        {finalTextTimingCheck.exact ? (
+                          <strong>Text a časovanie sedia presne.</strong>
+                        ) : (
+                          <>
+                            <strong>Text a časovanie sa líšia. Pred finálnym exportom ich zosúlaď.</strong>
+                            <span>Prvý rozdiel: riadok {finalTextTimingCheck.firstMismatchLine}</span>
+                            <span>Projekt: {finalTextTimingCheck.projectLine || "—"}</span>
+                            <span>Časovanie: {finalTextTimingCheck.timingLine || "—"}</span>
+                            <button
+                              className="secondary-button"
+                              disabled={!generatedTimingText.trim()}
+                              onClick={handleReplaceMainTextFromTiming}
+                              type="button"
+                            >
+                              Nahradiť hlavný text textom z časovania
+                            </button>
+                          </>
+                        )}
+                      </section>
+                    )}
+
                     {hasIncompleteTiming && (
                       <p className="soft-warning">Niektoré bloky nemajú vyplnené pole Od alebo Do. V tejto verzii sa dajú uložiť aj tak.</p>
                     )}
@@ -647,22 +982,85 @@ export default function App() {
                             aria-selected={block.id === selectedTimingBlockId}
                             className={block.id === selectedTimingBlockId ? "timing-row active" : "timing-row"}
                             key={block.id}
-                            onClick={() => setSelectedTimingBlockId(block.id)}
+                            onClick={() => handleSelectTimingBlock(block)}
                             onKeyDown={(event) => {
+                              if (
+                                event.target instanceof HTMLInputElement ||
+                                event.target instanceof HTMLTextAreaElement ||
+                                event.target instanceof HTMLButtonElement
+                              ) {
+                                return;
+                              }
+
                               if (event.key === "Enter" || event.key === " ") {
                                 event.preventDefault();
-                                setSelectedTimingBlockId(block.id);
+                                handleSelectTimingBlock(block);
                               }
+                            }}
+                            ref={(element) => {
+                              timingRowRefs.current[block.id] = element;
                             }}
                             role="row"
                             tabIndex={0}
                           >
-                            <span className="time-cell">{block.start || "—"}</span>
-                            <span className="time-cell">{block.end || "—"}</span>
-                            <span className="compact-cell" title={block.section}>{block.section || "—"}</span>
-                            <span className="compact-cell" title={block.voice}>{block.voice || "—"}</span>
-                            <span className="text-cell" title={block.text}>{block.text || "Bez textu"}</span>
-                            <span className="compact-cell" title={block.notes}>{block.notes || "—"}</span>
+                            <input
+                              aria-label="Od"
+                              className="timing-row-input time-cell"
+                              onClick={(event) => event.stopPropagation()}
+                              onFocus={() => setSelectedTimingBlockId(block.id)}
+                              onChange={(event) => handleUpdateTimingBlock(block.id, "start", event.target.value)}
+                              placeholder="—"
+                              value={block.start}
+                            />
+                            <input
+                              aria-label="Do"
+                              className="timing-row-input time-cell"
+                              onClick={(event) => event.stopPropagation()}
+                              onFocus={() => setSelectedTimingBlockId(block.id)}
+                              onChange={(event) => handleUpdateTimingBlock(block.id, "end", event.target.value)}
+                              placeholder="—"
+                              value={block.end}
+                            />
+                            <input
+                              aria-label="Sekcia"
+                              className="timing-row-input compact-cell"
+                              onClick={(event) => event.stopPropagation()}
+                              onFocus={() => setSelectedTimingBlockId(block.id)}
+                              onChange={(event) => handleUpdateTimingBlock(block.id, "section", event.target.value)}
+                              placeholder="—"
+                              title={block.section}
+                              value={block.section}
+                            />
+                            <input
+                              aria-label="Hlas"
+                              className="timing-row-input compact-cell"
+                              onClick={(event) => event.stopPropagation()}
+                              onFocus={() => setSelectedTimingBlockId(block.id)}
+                              onChange={(event) => handleUpdateTimingBlock(block.id, "voice", event.target.value)}
+                              placeholder="—"
+                              title={block.voice}
+                              value={block.voice}
+                            />
+                            <input
+                              aria-label="Text alebo riadok"
+                              className="timing-row-input text-cell"
+                              onClick={(event) => event.stopPropagation()}
+                              onFocus={() => setSelectedTimingBlockId(block.id)}
+                              onChange={(event) => handleUpdateTimingBlock(block.id, "text", event.target.value)}
+                              placeholder="Bez textu"
+                              title={block.text}
+                              value={block.text}
+                            />
+                            <input
+                              aria-label="Poznámka"
+                              className="timing-row-input compact-cell"
+                              onClick={(event) => event.stopPropagation()}
+                              onFocus={() => setSelectedTimingBlockId(block.id)}
+                              onChange={(event) => handleUpdateTimingBlock(block.id, "notes", event.target.value)}
+                              placeholder="—"
+                              title={block.notes}
+                              value={block.notes}
+                            />
                             <button
                               className="delete-button"
                               disabled={isBusy || !canUseProjectRuntime}
@@ -768,6 +1166,30 @@ export default function App() {
                     placeholder="Poznámka k bloku"
                   />
                 </label>
+                <div className="sync-tools" aria-label="Text a timing synchronizácia">
+                  <span className="field-label">Text ↔ timing</span>
+                  <p>
+                    {lastClickedTextLine?.text.trim()
+                      ? `Posledný riadok: ${lastClickedTextLine.text.trim()}`
+                      : "Klikni na riadok v hlavnom texte a potom môžeš ručne zosúladiť vybraný blok."}
+                  </p>
+                  <button
+                    className="secondary-button"
+                    disabled={!lastClickedTextLine?.text.trim()}
+                    onClick={handleUseClickedLineInTimingBlock}
+                    type="button"
+                  >
+                    Prevziať text z riadku
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={!selectedTimingBlock.text.trim() || !lastClickedTextLine}
+                    onClick={handleUseTimingBlockInProjectText}
+                    type="button"
+                  >
+                    Prevziať text z časovania
+                  </button>
+                </div>
                 <button
                   className="delete-button"
                   disabled={isBusy || !canUseProjectRuntime}
@@ -893,6 +1315,221 @@ function normalizeTimingBlocks(timing: Partial<TimingBlock>[] | null | undefined
     linkedAssetIds: Array.isArray(block.linkedAssetIds) ? block.linkedAssetIds : [],
     linkedOutputIds: Array.isArray(block.linkedOutputIds) ? block.linkedOutputIds : [],
   }));
+}
+
+function normalizeTextLineForMatch(value: string) {
+  return value
+    .replace(/[“”„]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.,!?:;…]+$/u, "")
+    .trim()
+    .toLocaleLowerCase("sk-SK");
+}
+
+function getTextLineSelectionAtCaret(text: string, caretIndex: number): TextLineSelection {
+  const line = getTextLineAtCaret(text, caretIndex);
+  const normalizedText = normalizeTextLineForMatch(line.text);
+
+  return {
+    ...line,
+    normalizedText,
+    occurrence: normalizedText ? countTextLineOccurrenceUntil(text, line.start, normalizedText) : 0,
+  };
+}
+
+function getTextLineAtCaret(text: string, caretIndex: number) {
+  const safeCaretIndex = Math.max(0, Math.min(caretIndex, text.length));
+  const lineStart = text.lastIndexOf("\n", Math.max(0, safeCaretIndex - 1)) + 1;
+  const nextLineBreak = text.indexOf("\n", safeCaretIndex);
+  const lineEnd = nextLineBreak === -1 ? text.length : nextLineBreak;
+
+  return {
+    start: lineStart,
+    end: lineEnd,
+    text: text.slice(lineStart, lineEnd),
+  };
+}
+
+function findTimingBlockForTextLine(
+  line: TextLineSelection,
+  timing: TimingBlock[],
+  selectedTimingBlockId: string | null,
+) {
+  const selectedIndex = timing.findIndex((block) => block.id === selectedTimingBlockId);
+  const selectedBlock = selectedIndex >= 0 ? timing[selectedIndex] : null;
+  const selectedBlockOccurrence =
+    selectedBlock && normalizeTextLineForMatch(selectedBlock.text) === line.normalizedText
+      ? countTimingOccurrenceUntil(timing, selectedIndex, line.normalizedText)
+      : 0;
+  const forwardStartIndex =
+    selectedIndex >= 0 && line.occurrence > selectedBlockOccurrence ? selectedIndex + 1 : Math.max(0, selectedIndex);
+  const forwardMatch =
+    selectedIndex >= 0
+      ? timing
+          .slice(forwardStartIndex)
+          .find((block) => normalizeTextLineForMatch(block.text) === line.normalizedText)
+      : null;
+
+  if (forwardMatch) return forwardMatch;
+
+  const occurrenceMatches = timing.filter((block) => normalizeTextLineForMatch(block.text) === line.normalizedText);
+  return occurrenceMatches[line.occurrence - 1] ?? null;
+}
+
+function findTextLineRange(text: string, normalizedLine: string) {
+  let lineStart = 0;
+
+  while (lineStart <= text.length) {
+    const nextLineBreak = text.indexOf("\n", lineStart);
+    const lineEnd = nextLineBreak === -1 ? text.length : nextLineBreak;
+    const lineText = text.slice(lineStart, lineEnd);
+
+    if (normalizeTextLineForMatch(lineText) === normalizedLine) {
+      return {
+        start: lineStart,
+        end: lineEnd,
+        text: lineText,
+      };
+    }
+
+    if (nextLineBreak === -1) break;
+    lineStart = nextLineBreak + 1;
+  }
+
+  return null;
+}
+
+function countTextLineOccurrenceUntil(text: string, targetStart: number, normalizedLine: string) {
+  let lineStart = 0;
+  let occurrence = 0;
+
+  while (lineStart <= text.length) {
+    const nextLineBreak = text.indexOf("\n", lineStart);
+    const lineEnd = nextLineBreak === -1 ? text.length : nextLineBreak;
+    const lineText = text.slice(lineStart, lineEnd);
+
+    if (normalizeTextLineForMatch(lineText) === normalizedLine) {
+      occurrence += 1;
+    }
+
+    if (lineStart >= targetStart || nextLineBreak === -1) break;
+    lineStart = nextLineBreak + 1;
+  }
+
+  return occurrence;
+}
+
+function countTimingOccurrenceUntil(timing: TimingBlock[], targetIndex: number, normalizedLine: string) {
+  return timing
+    .slice(0, targetIndex + 1)
+    .filter((block) => normalizeTextLineForMatch(block.text) === normalizedLine).length;
+}
+
+function replaceSelectedTextLine(text: string, selection: TextLineSelection, replacementLine: string) {
+  const currentLineAtStoredRange = text.slice(selection.start, selection.end);
+  const matchingLine =
+    currentLineAtStoredRange === selection.text
+      ? selection
+      : findTextLineRange(text, selection.normalizedText);
+
+  if (!matchingLine) return null;
+
+  const nextBody = `${text.slice(0, matchingLine.start)}${replacementLine}${text.slice(matchingLine.end)}`;
+  const nextSelection: TextLineSelection = {
+    start: matchingLine.start,
+    end: matchingLine.start + replacementLine.length,
+    text: replacementLine,
+    normalizedText: normalizeTextLineForMatch(replacementLine),
+    occurrence: countTextLineOccurrenceUntil(nextBody, matchingLine.start, normalizeTextLineForMatch(replacementLine)),
+  };
+
+  return {
+    body: nextBody,
+    selection: nextSelection,
+  };
+}
+
+function buildExactTextFromTiming(timing: TimingBlock[]) {
+  return timing
+    .filter((block) => block.text.trim())
+    .map((block) => block.text)
+    .join("\n");
+}
+
+function compareProjectTextWithTimingText(projectText: string, timingText: string): FinalTextTimingCheck {
+  if (projectText === timingText) {
+    return {
+      exact: true,
+      firstMismatchLine: null,
+      projectLine: "",
+      timingLine: "",
+    };
+  }
+
+  const projectLines = projectText.split("\n");
+  const timingLines = timingText.split("\n");
+  const maxLineCount = Math.max(projectLines.length, timingLines.length);
+
+  for (let index = 0; index < maxLineCount; index += 1) {
+    const projectLine = projectLines[index] ?? "";
+    const timingLine = timingLines[index] ?? "";
+
+    if (projectLine !== timingLine) {
+      return {
+        exact: false,
+        firstMismatchLine: index + 1,
+        projectLine,
+        timingLine,
+      };
+    }
+  }
+
+  return {
+    exact: false,
+    firstMismatchLine: maxLineCount + 1,
+    projectLine: "",
+    timingLine: "",
+  };
+}
+
+function makeDraftSnapshot(
+  textDraft: ProjectText,
+  timingDraft: TimingBlock[],
+  selectedTimingBlockId: string | null,
+  lastClickedTextLine: TextLineSelection | null,
+): DraftSnapshot {
+  return {
+    textDraft: { ...textDraft },
+    timingDraft: timingDraft.map((block) => ({
+      ...block,
+      linkedShotIds: [...block.linkedShotIds],
+      linkedAssetIds: [...block.linkedAssetIds],
+      linkedOutputIds: [...block.linkedOutputIds],
+    })),
+    selectedTimingBlockId,
+    lastClickedTextLine: lastClickedTextLine ? { ...lastClickedTextLine } : null,
+  };
+}
+
+function draftSnapshotsAreEqual(firstSnapshot: DraftSnapshot, secondSnapshot: DraftSnapshot) {
+  return JSON.stringify(firstSnapshot) === JSON.stringify(secondSnapshot);
+}
+
+function scrollTextareaToLine(textarea: HTMLTextAreaElement, lineStart: number) {
+  const textBeforeLine = textarea.value.slice(0, lineStart);
+  const lineIndex = textBeforeLine.split(/\r\n|\r|\n/).length - 1;
+  const computedStyle = window.getComputedStyle(textarea);
+  const parsedLineHeight = Number.parseFloat(computedStyle.lineHeight);
+  const parsedFontSize = Number.parseFloat(computedStyle.fontSize);
+  const lineHeight = Number.isNaN(parsedLineHeight)
+    ? Number.isNaN(parsedFontSize)
+      ? 20
+      : parsedFontSize * 1.35
+    : parsedLineHeight;
+
+  textarea.scrollTop = Math.max(0, lineIndex * lineHeight - textarea.clientHeight / 3);
 }
 
 function projectTextForComparison(text: Partial<ProjectText> | null | undefined) {
