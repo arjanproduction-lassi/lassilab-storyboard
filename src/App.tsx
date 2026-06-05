@@ -43,6 +43,7 @@ type LastProject = {
 };
 
 type TimingEditableField = "start" | "end" | "text" | "section" | "voice" | "notes";
+type TextPanelMode = "hidden" | "compact" | "expanded";
 
 const LAST_PROJECT_STORAGE_KEY = "lassiLabStoryboard.lastProject";
 
@@ -86,7 +87,7 @@ export default function App() {
   const [timingImportText, setTimingImportText] = useState("");
   const [selectedTimingBlockId, setSelectedTimingBlockId] = useState<string | null>(null);
   const [isTimingImportOpen, setIsTimingImportOpen] = useState(false);
-  const [isTextDockOpen, setIsTextDockOpen] = useState(false);
+  const [textPanelMode, setTextPanelMode] = useState<TextPanelMode>("compact");
 
   const selectedSection = useMemo(
     () => sections.find((section) => section.id === selectedSectionId) ?? sections[0],
@@ -507,10 +508,10 @@ export default function App() {
           )}
 
           {selectedSectionId === "text-timing" && (
-            <section className="text-timing-section" aria-label="Text a časovanie">
+            <section className={`text-timing-section text-mode-${textPanelMode}`} aria-label="Text a časovanie">
               {project ? (
                 <>
-                  <section className={isTextDockOpen ? "text-editor-panel text-dock open" : "text-editor-panel text-dock"} aria-label="Text piesne alebo básne">
+                  <section className={`text-editor-panel text-dock ${textPanelMode}`} aria-label="Text piesne alebo básne">
                     <div className="panel-header">
                       <div>
                         <p className="eyebrow">Text projektu</p>
@@ -519,11 +520,34 @@ export default function App() {
                           {textDraft.body.trim() ? `${textDraft.body.trim().split(/\s+/).length} slov` : "Text ešte nie je vyplnený"}
                         </p>
                       </div>
-                      <button className="secondary-button" onClick={() => setIsTextDockOpen((isOpen) => !isOpen)} type="button">
-                        {isTextDockOpen ? "Skryť text" : "Otvoriť text"}
-                      </button>
+                      <div className="panel-mode-actions" aria-label="Režim textového panelu" role="group">
+                        <button
+                          aria-pressed={textPanelMode === "hidden"}
+                          className={textPanelMode === "hidden" ? "mode-button active" : "mode-button"}
+                          onClick={() => setTextPanelMode("hidden")}
+                          type="button"
+                        >
+                          Skryť text
+                        </button>
+                        <button
+                          aria-pressed={textPanelMode === "compact"}
+                          className={textPanelMode === "compact" ? "mode-button active" : "mode-button"}
+                          onClick={() => setTextPanelMode("compact")}
+                          type="button"
+                        >
+                          Zobraziť text
+                        </button>
+                        <button
+                          aria-pressed={textPanelMode === "expanded"}
+                          className={textPanelMode === "expanded" ? "mode-button active" : "mode-button"}
+                          onClick={() => setTextPanelMode("expanded")}
+                          type="button"
+                        >
+                          Zväčšiť text
+                        </button>
+                      </div>
                     </div>
-                    {isTextDockOpen && (
+                    {textPanelMode !== "hidden" && (
                       <div className="text-dock-grid">
                         <label>
                           <span>Text piesne / básne</span>

@@ -426,17 +426,29 @@ button:disabled {
 
 .text-timing-section {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 5px;
+  grid-template-columns: minmax(320px, 38%) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 8px;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
+}
+
+.text-timing-section.text-mode-expanded {
+  grid-template-columns: minmax(420px, 48%) minmax(0, 1fr);
+}
+
+.text-timing-section.text-mode-hidden {
+  grid-template-columns: minmax(150px, 180px) minmax(0, 1fr);
 }
 
 .text-dock,
 .timing-workspace {
   display: grid;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
   gap: 6px;
-  padding: 0;
 }
 
 .text-dock,
@@ -447,20 +459,61 @@ button:disabled {
 }
 
 .text-dock {
-  border: 0;
-  border-bottom: 1px solid #ded5c6;
-  padding-bottom: 5px;
-}
-
-.text-dock.open {
+  grid-template-rows: auto minmax(0, 1fr);
   border: 1px solid #ded5c6;
   border-radius: 6px;
   padding: 8px;
+  overflow: hidden;
   background: #fffdf8;
 }
 
-.timing-workspace {
+.text-dock.compact {
+  background: #fffdf8;
+}
+
+.text-dock.expanded {
+  background: #fffdf8;
+}
+
+.text-dock.hidden {
+  grid-template-rows: auto;
+  align-content: start;
+  background: #fbfaf6;
+}
+
+.text-dock.compact .text-dock-grid {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.text-dock.expanded .text-dock-grid {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.text-dock.compact .text-body-input {
+  height: 100%;
   min-height: 0;
+  max-height: none;
+}
+
+.text-dock.expanded .text-body-input {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
+.text-dock.compact .text-notes-input {
+  height: 58px;
+  min-height: 44px;
+  max-height: 90px;
+}
+
+.text-dock.expanded .text-notes-input {
+  height: 76px;
+  min-height: 56px;
+  max-height: 120px;
+}
+
+.timing-workspace {
   border: 0;
   background: transparent;
   grid-template-rows: auto auto auto minmax(0, 1fr);
@@ -485,26 +538,60 @@ button:disabled {
   font-size: 0.96rem;
 }
 
+.panel-mode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.mode-button,
+.text-timing-section .mode-button {
+  min-height: 28px;
+  border: 1px solid #cfc6b5;
+  border-radius: 5px;
+  padding: 4px 7px;
+  color: #2d2a26;
+  background: #f7f2e6;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.mode-button.active,
+.text-timing-section .mode-button.active {
+  border-color: #d7ae45;
+  color: #1f1d1a;
+  background: #e9c768;
+}
+
 .text-dock-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(220px, 0.85fr);
   gap: 7px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.text-dock-grid label {
+  min-height: 0;
+}
+
+.text-dock-grid label:first-child {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.text-body-input {
+  overflow: auto;
+  resize: none;
+}
+
+.text-notes-input {
+  overflow: auto;
 }
 
 .dock-summary {
   margin: 2px 0 0;
   color: #746d60;
   font-size: 0.76rem;
-}
-
-.text-body-input {
-  min-height: 92px;
-  max-height: 150px;
-}
-
-.text-notes-input {
-  min-height: 46px;
-  max-height: 92px;
 }
 
 .timing-toolbar {
@@ -747,8 +834,15 @@ button:disabled {
   .project-actions,
   .last-project-card,
   .text-dock-grid,
-  .topbar {
+  .topbar,
+  .text-timing-section,
+  .text-timing-section.text-mode-expanded,
+  .text-timing-section.text-mode-hidden {
     grid-template-columns: 1fr;
+  }
+
+  .text-timing-section {
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .topbar-title,

@@ -16,14 +16,19 @@
 - Keep import as an explicit draft step: paste/read source, add blocks, edit, then save project.
 - Avoid building a full video/audio editor until the manifest workflow is reliable.
 
-## Next: Compact Text And Timing Workspace
+## Completed: Text And Timing Split Workbench Layout
 
-- Reduce oversized informational cards in project work sections.
-- Make the active project dashboard more compact after a project is open.
-- Treat Text & Timing as a real working desk, not a stack of large information frames.
-- Show timing blocks in a denser editable list.
-- Move detailed block editing toward the right inspector after selecting a block.
-- Keep a visible save state: saved, unsaved changes and last saved time.
+- Use a horizontal split workspace for Text & Timing on wide desktop screens.
+- Keep project text visible beside the timing list instead of stacked above it.
+- Keep the right inspector docked for selected timing block editing.
+- Keep timing rows dense so more blocks are visible at once.
+- Keep the top toolbar as the compact project/save status strip.
+
+## Open Design Note: Text Panel Modes
+
+- Leave the third text mode in practical use for now instead of polishing it endlessly.
+- Future direction may become wider text, larger font, reading mode, hidden notes or linking a text verse with a timing row.
+- Let real project work decide which option is most useful.
 
 ## Later: Timeline Board
 
