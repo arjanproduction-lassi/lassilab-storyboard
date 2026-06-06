@@ -132,31 +132,62 @@ Timing blocks are lightweight text/time rows. They are not a video timeline. The
 
 ### Scene
 
+Draft definition:
+
+Scene is a narrative/story unit inside a visual storytelling project. It groups shots that belong together by story beat, location, emotional phase, visual chapter or production logic.
+
 ```json
 {
   "id": "scene_001",
-  "title": "Opening archive",
-  "order": 1,
-  "summary": "",
-  "shotIds": []
+  "title": "",
+  "description": "",
+  "notes": "",
+  "startTime": null,
+  "endTime": null,
+  "order": 1
 }
 ```
 
 ### Shot
 
+Draft definition:
+
+Shot represents a creative intention or visual idea. It is not a concrete image, video file or generated output. One Shot may later link to multiple prompts, assets and outputs as attempts to realize that intention. These links are not implemented in the Scenes & Shots v1 draft yet.
+
 ```json
 {
   "id": "shot_001",
   "sceneId": "scene_001",
-  "order": 1,
-  "timeStartMs": null,
-  "timeEndMs": null,
+  "title": "",
   "description": "",
-  "referenceAssetIds": [],
-  "promptIds": [],
-  "selectedOutputId": null
+  "visualIntent": "",
+  "emotion": "",
+  "motifs": [],
+  "notes": "",
+  "status": "draft",
+  "order": 1
 }
 ```
+
+### Project -> Scene -> Shot Draft
+
+```text
+Project
+└─ Scene
+   └─ Shot
+```
+
+Example for `Pradávny kód`:
+
+```text
+Scene 01 - Sucho
+Shots:
+- Bosá noha vstupuje do hliny
+- Črep v zemi
+- Prvá kvapka dopadne na prach
+```
+
+This is a documentation draft only. It does not change `schemaVersion`, save/load logic or the current manifest writer.
 
 ### Prompt
 

@@ -49,12 +49,15 @@
 
 ## Next After Testing: Scenes And Shots V1
 
-- Add scene list.
-- Add shot list.
-- Link shots to existing timing blocks or timing ranges.
+- Create, edit and delete scenes.
+- Create, edit and delete shots under a scene.
+- Save and load scenes/shots through `project.llstory.json`.
+- Keep Scene as a narrative/story unit.
+- Keep Shot as a creative intention / visual idea, not an image, video or file.
+- Allow future linking to prompts, assets and outputs, but do not implement those links yet.
 - Keep the project manifest as the source of truth.
 - Keep the implementation small and local-first.
-- Do not implement timeline engine, thumbnails, drag/drop media import or AI generation in this pass.
+- Do not implement assets, prompts, outputs, timeline engine, thumbnails, drag/drop media import or AI generation in this pass.
 
 ## Later: Timeline Board
 
