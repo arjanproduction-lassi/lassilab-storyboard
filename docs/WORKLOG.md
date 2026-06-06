@@ -146,3 +146,41 @@
 - The next recommended feature after that practical testing is `Scenes & Shots v1`.
 - `Scenes & Shots v1` should link scenes and shots to existing timing blocks without changing the manifest more than necessary.
 - Timeline Board, audio playback, DOCX/PDF export and media import should still wait.
+
+## 2026-06-06
+
+### Resizable Scenes & Shots Columns And Digital Atelier Vision
+
+- Continued the `Sceny a zabery` desktop workbench direction with user-resizable columns.
+- Added local UI layout state for scenes, shots, editor and right dock widths.
+- Kept layout state in localStorage only, not in `project.llstory.json`.
+- Added a `Reset rozlozenia` control for returning the Scenes & Shots workspace to default widths and expanded inspector state.
+- Added `docs/VISION.md` as a future-facing Lassi LAB Digital Atelier note.
+- Documented AI as an assistant/apprentice, Timeline Board as an emotional/story map and Shot as a creative intention.
+
+### Safety Notes
+
+- No manifest schema changes were made.
+- No save/load data changes were made.
+- No Tauri command changes were made.
+- No AI, timeline engine, drag/drop, thumbnails, media import or prompt/output linking was implemented.
+
+### Scenes & Shots V1 Minimal Implementation
+
+- Added the first usable `Scény a zábery` module.
+- Scene is treated as a narrative/story unit.
+- Shot is treated as a creative intention or visual idea, not an image, video or file.
+- Scenes and shots are stored in `project.llstory.json` as `scenes` and `shots`.
+- Existing older projects without these fields load safely with empty arrays.
+- The UI supports creating, editing, deleting and reordering scenes and shots.
+- Scene delete is blocked while the scene still contains shots.
+- Shot delete asks for confirmation.
+- Shot motifs use a comma-separated UI field and are saved as a string array.
+- Shot status supports `draft`, `approved`, `used`, `rejected` and `archived`.
+
+### Safety Notes
+
+- No user files are deleted or moved.
+- No assets, prompts, outputs, thumbnails, timeline engine, audio playback, drag/drop import or AI generation were added.
+- `schemaVersion` remains `1`.
+- The next recommended step is testing the module on the real project `Pradávny kód` before adding links to timing/assets/prompts/outputs.

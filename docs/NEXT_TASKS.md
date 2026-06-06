@@ -1,5 +1,31 @@
 # Next Tasks
 
+## Current Priority: Resizable Scenes And Shots Columns
+
+- Finish and test user-resizable columns in `Sceny a zabery`.
+- Allow the user to adjust scenes, shots, editor and right dock widths for large Windows monitors.
+- Store column widths in localStorage only.
+- Do not write layout preferences into `project.llstory.json`.
+- Keep the project dirty state unchanged while resizing panels.
+- Confirm that `Reset rozlozenia` restores default column widths and right dock state.
+
+## Vision: Lassi LAB Digital Atelier
+
+- Keep `docs/VISION.md` as the long-term product direction, not an implementation promise.
+- Preserve the local-first atelier principle: the author owns the project folder, manifest, assets, drafts, exports and snapshots.
+- Keep `project.llstory.json` as the source of truth for project content.
+- Keep Shot as a creative intention, not a media file.
+- Treat AI as an assistant/apprentice, not an autopilot.
+- Treat the future Timeline Board as an emotional/story map, not a replacement for final editing in Edius.
+
+## Future Backlog: Digital Atelier
+
+- AI atelier assistant.
+- Timeline / emotional story map.
+- Prompt architect for turning shots into prompt versions.
+- Output review helpers that compare results against shot intent.
+- Cross-project motif memory, only after the local project workflows are stable.
+
 ## Completed: Project Package V1
 
 - Create a new empty project package through Tauri commands.
@@ -47,7 +73,7 @@
 - Watch for repeated lines, punctuation differences, long notes and dense timing edits.
 - Do not start Timeline Board, audio playback or media import until the Text & Timing workflow feels reliable.
 
-## Next After Testing: Scenes And Shots V1
+## Completed: Scenes And Shots V1 Minimal Implementation
 
 - Create, edit and delete scenes.
 - Create, edit and delete shots under a scene.
@@ -58,6 +84,14 @@
 - Keep the project manifest as the source of truth.
 - Keep the implementation small and local-first.
 - Do not implement assets, prompts, outputs, timeline engine, thumbnails, drag/drop media import or AI generation in this pass.
+
+## Recommended Next: Test Scenes & Shots On Pradávny kód
+
+- Create 3-5 scenes for the real project.
+- Add the first 10-15 shots as creative intentions, not media files.
+- Check whether fields `visualIntent`, `emotion`, `motifs`, `notes` and `status` feel natural in real work.
+- Watch whether scene/shot ordering is enough before adding links to timing, assets, prompts or outputs.
+- Do not start Timeline Board, media import or AI generation until this structure feels useful in practice.
 
 ## Later: Timeline Board
 

@@ -28,6 +28,35 @@ export type TimingBlock = {
   linkedOutputIds: string[];
 };
 
+export type Scene = {
+  id: string;
+  title: string;
+  description: string;
+  notes: string;
+  startTime: string | null;
+  endTime: string | null;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ShotStatus = "draft" | "approved" | "used" | "rejected" | "archived";
+
+export type Shot = {
+  id: string;
+  sceneId: string;
+  title: string;
+  description: string;
+  visualIntent: string;
+  emotion: string;
+  motifs: string[];
+  notes: string;
+  status: ShotStatus;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ProjectPackage = {
   appName: "Lassi LAB Storyboard";
   schemaVersion: 1;
@@ -40,6 +69,8 @@ export type ProjectPackage = {
   updatedAt: string;
   text: ProjectText;
   timing: TimingBlock[];
+  scenes: Scene[];
+  shots: Shot[];
   counts: ProjectCounts;
 };
 
@@ -77,6 +108,25 @@ export function saveProjectTextTiming(folderPath: string, text: ProjectText, tim
       folderPath,
       text,
       timing,
+      timestamp: new Date().toISOString(),
+    },
+  });
+}
+
+export function saveProjectSections(
+  folderPath: string,
+  text: ProjectText,
+  timing: TimingBlock[],
+  scenes: Scene[],
+  shots: Shot[],
+) {
+  return invoke<ProjectPackage>("save_text_timing", {
+    request: {
+      folderPath,
+      text,
+      timing,
+      scenes,
+      shots,
       timestamp: new Date().toISOString(),
     },
   });

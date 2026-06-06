@@ -5,8 +5,11 @@ import {
   createProjectPackage,
   hasDesktopProjectRuntime,
   openProjectPackage,
+  saveProjectSections,
   readTextTimingImportFile,
-  saveProjectTextTiming,
+  type Scene,
+  type Shot,
+  type ShotStatus,
   type ProjectPackage,
   type ProjectText,
   type TimingBlock,
@@ -66,9 +69,55 @@ type DraftSnapshot = {
 
 type TimingEditableField = "start" | "end" | "text" | "section" | "voice" | "notes";
 type TextPanelMode = "hidden" | "compact" | "expanded";
+type SceneEditableField = "title" | "description" | "notes" | "startTime" | "endTime";
+type ShotEditableField = "title" | "description" | "visualIntent" | "emotion" | "motifs" | "notes" | "status";
+type RightDockTab = "inspector" | "overview";
+type ScenesShotsResizeKind = "scenes-shots" | "shots-editor" | "scene-shot-editor" | "right-dock";
+type SceneShotEditorMode = "both" | "scene" | "shot";
+
+type RightDockState = {
+  selectedTab: RightDockTab;
+  collapsed: boolean;
+};
+
+type ScenesShotsLayout = {
+  scenes: number;
+  shots: number;
+  editor: number;
+  sceneEditor: number;
+  dock: number;
+};
+
+const SHOT_EDITOR_MIN_WIDTH = 420;
 
 const LAST_PROJECT_STORAGE_KEY = "lassiLabStoryboard.lastProject";
+const RIGHT_DOCK_STORAGE_KEY = "lassiLabStoryboard.rightDock";
+const SCENES_SHOTS_LAYOUT_STORAGE_KEY = "lassiLabStoryboard.scenesShotsLayout";
+const SCENE_SHOT_EDITOR_MODE_STORAGE_KEY = "lassiLabStoryboard.sceneShotEditorMode";
 const DRAFT_HISTORY_LIMIT = 40;
+const SCENE_EDITOR_MIN_WIDTH = 340;
+const defaultScenesShotsLayout: ScenesShotsLayout = {
+  scenes: 280,
+  shots: 360,
+  editor: 720,
+  sceneEditor: 400,
+  dock: 260,
+};
+const scenesShotsLayoutLimits: Record<keyof ScenesShotsLayout, { min: number; max: number }> = {
+  scenes: { min: 220, max: 520 },
+  shots: { min: 260, max: 760 },
+  editor: { min: 520, max: 1280 },
+  sceneEditor: { min: SCENE_EDITOR_MIN_WIDTH, max: 860 },
+  dock: { min: 240, max: 560 },
+};
+const SCENE_SHOT_EDITOR_STACK_WIDTH = SCENE_EDITOR_MIN_WIDTH + SHOT_EDITOR_MIN_WIDTH + 40;
+const shotStatusOptions: Array<{ value: ShotStatus; label: string }> = [
+  { value: "draft", label: "Návrh" },
+  { value: "approved", label: "Schválený" },
+  { value: "used", label: "Použitý" },
+  { value: "rejected", label: "Zamietnutý" },
+  { value: "archived", label: "Archivovaný" },
+];
 
 const emptyProjectText: ProjectText = {
   body: "",
@@ -107,24 +156,49 @@ export default function App() {
   const [isBusy, setIsBusy] = useState(false);
   const [textDraft, setTextDraft] = useState<ProjectText>(emptyProjectText);
   const [timingDraft, setTimingDraft] = useState<TimingBlock[]>([]);
+  const [sceneDraft, setSceneDraft] = useState<Scene[]>([]);
+  const [shotDraft, setShotDraft] = useState<Shot[]>([]);
   const [timingImportText, setTimingImportText] = useState("");
   const [selectedTimingBlockId, setSelectedTimingBlockId] = useState<string | null>(null);
+  const [selectedSceneId, setSelectedSceneId] = useState<string | null>(null);
+  const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
   const [isTimingImportOpen, setIsTimingImportOpen] = useState(false);
   const [textPanelMode, setTextPanelMode] = useState<TextPanelMode>("compact");
   const [lastClickedTextLine, setLastClickedTextLine] = useState<TextLineSelection | null>(null);
   const [isTimingTextPreviewOpen, setIsTimingTextPreviewOpen] = useState(false);
   const [finalTextTimingCheck, setFinalTextTimingCheck] = useState<FinalTextTimingCheck | null>(null);
+  const [rightDockTab, setRightDockTab] = useState<RightDockTab>(() => readRightDockState().selectedTab);
+  const [isRightDockCollapsed, setIsRightDockCollapsed] = useState(() => readRightDockState().collapsed);
+  const [scenesShotsLayout, setScenesShotsLayout] = useState<ScenesShotsLayout>(() => readScenesShotsLayout());
+  const [sceneShotEditorMode, setSceneShotEditorMode] = useState<SceneShotEditorMode>(() => readSceneShotEditorMode());
+  const [sceneShotEditorWidth, setSceneShotEditorWidth] = useState(0);
   const [historyVersion, setHistoryVersion] = useState(0);
   const textBodyInputRef = useRef<HTMLTextAreaElement | null>(null);
   const timingRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const sceneShotEditorPanelRef = useRef<HTMLDivElement | null>(null);
   const undoStackRef = useRef<DraftSnapshot[]>([]);
   const redoStackRef = useRef<DraftSnapshot[]>([]);
+
+  const appShellStyle = {
+    "--right-dock-width": `${scenesShotsLayout.dock}px`,
+  } as React.CSSProperties & Record<string, string>;
+  const scenesShotsSectionStyle = {
+    "--scenes-column-width": `${scenesShotsLayout.scenes}px`,
+    "--shots-column-width": `${scenesShotsLayout.shots}px`,
+    "--editor-column-width": `${scenesShotsLayout.editor}px`,
+    "--scene-editor-width": `${scenesShotsLayout.sceneEditor}px`,
+  } as React.CSSProperties & Record<string, string>;
 
   const selectedSection = useMemo(
     () => sections.find((section) => section.id === selectedSectionId) ?? sections[0],
     [selectedSectionId],
   );
   const isTextTimingWorkspace = selectedSectionId === "text-timing";
+  const isScenesShotsWorkspace = selectedSectionId === "scenes-shots";
+  const isSceneShotEditorStacked =
+    (sceneShotEditorWidth || scenesShotsLayout.editor) < SCENE_SHOT_EDITOR_STACK_WIDTH;
+  const isSceneEditorVisible = sceneShotEditorMode !== "shot";
+  const isShotEditorVisible = sceneShotEditorMode !== "scene";
   const showProjectOverview = selectedSectionId === "projects";
   const canUseProjectRuntime = hasDesktopProjectRuntime();
   const stats: StatItem[] = project
@@ -148,11 +222,37 @@ export default function App() {
       JSON.stringify(timingBlocksForComparison(timingDraft)) !== JSON.stringify(timingBlocksForComparison(project.timing))
     );
   }, [project, textDraft, timingDraft]);
+  const hasUnsavedScenesShotsChanges = useMemo(() => {
+    if (!project) return false;
+
+    return (
+      JSON.stringify(scenesForComparison(sceneDraft)) !== JSON.stringify(scenesForComparison(project.scenes)) ||
+      JSON.stringify(shotsForComparison(shotDraft)) !== JSON.stringify(shotsForComparison(project.shots))
+    );
+  }, [project, sceneDraft, shotDraft]);
+  const hasUnsavedProjectChanges = hasUnsavedTextTimingChanges || hasUnsavedScenesShotsChanges;
   const selectedTimingBlock = useMemo(
     () => timingDraft.find((block) => block.id === selectedTimingBlockId) ?? null,
     [selectedTimingBlockId, timingDraft],
   );
+  const orderedScenes = useMemo(() => [...sceneDraft].sort(compareByOrder), [sceneDraft]);
+  const selectedScene = useMemo(
+    () => sceneDraft.find((scene) => scene.id === selectedSceneId) ?? orderedScenes[0] ?? null,
+    [orderedScenes, sceneDraft, selectedSceneId],
+  );
+  const selectedSceneShots = useMemo(
+    () => (selectedScene ? shotDraft.filter((shot) => shot.sceneId === selectedScene.id).sort(compareByOrder) : []),
+    [selectedScene, shotDraft],
+  );
+  const selectedShot = useMemo(
+    () => selectedSceneShots.find((shot) => shot.id === selectedShotId) ?? selectedSceneShots[0] ?? null,
+    [selectedSceneShots, selectedShotId],
+  );
   const generatedTimingText = useMemo(() => buildExactTextFromTiming(timingDraft), [timingDraft]);
+  const scenesShotsOverview = useMemo(
+    () => buildScenesShotsOverview(project?.title ?? "Bez otvoreného projektu", sceneDraft, shotDraft),
+    [project?.title, sceneDraft, shotDraft],
+  );
   const canUndoDraft = undoStackRef.current.length > 0;
   const canRedoDraft = redoStackRef.current.length > 0;
   void historyVersion;
@@ -161,7 +261,11 @@ export default function App() {
     if (!project) {
       setTextDraft(emptyProjectText);
       setTimingDraft([]);
+      setSceneDraft([]);
+      setShotDraft([]);
       setSelectedTimingBlockId(null);
+      setSelectedSceneId(null);
+      setSelectedShotId(null);
       setLastClickedTextLine(null);
       setIsTimingTextPreviewOpen(false);
       setFinalTextTimingCheck(null);
@@ -170,8 +274,12 @@ export default function App() {
     }
 
     const normalizedTiming = normalizeTimingBlocks(project.timing);
+    const normalizedScenes = normalizeScenes(project.scenes);
+    const normalizedShots = normalizeShots(project.shots);
     setTextDraft(normalizeProjectText(project.text));
     setTimingDraft(normalizedTiming);
+    setSceneDraft(normalizedScenes);
+    setShotDraft(normalizedShots);
     setLastClickedTextLine(null);
     setIsTimingTextPreviewOpen(false);
     setFinalTextTimingCheck(null);
@@ -181,10 +289,20 @@ export default function App() {
         ? currentId
         : normalizedTiming[0]?.id ?? null,
     );
+    setSelectedSceneId((currentId) =>
+      currentId && normalizedScenes.some((scene) => scene.id === currentId)
+        ? currentId
+        : [...normalizedScenes].sort(compareByOrder)[0]?.id ?? null,
+    );
+    setSelectedShotId((currentId) =>
+      currentId && normalizedShots.some((shot) => shot.id === currentId)
+        ? currentId
+        : [...normalizedShots].sort(compareByOrder)[0]?.id ?? null,
+    );
   }, [project]);
 
   useEffect(() => {
-    if (!hasUnsavedTextTimingChanges) return;
+    if (!hasUnsavedProjectChanges) return;
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
@@ -193,7 +311,42 @@ export default function App() {
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [hasUnsavedTextTimingChanges]);
+  }, [hasUnsavedProjectChanges]);
+
+  useEffect(() => {
+    writeRightDockState({
+      selectedTab: rightDockTab,
+      collapsed: isRightDockCollapsed,
+    });
+  }, [isRightDockCollapsed, rightDockTab]);
+
+  useEffect(() => {
+    writeScenesShotsLayout(scenesShotsLayout);
+  }, [scenesShotsLayout]);
+
+  useEffect(() => {
+    writeSceneShotEditorMode(sceneShotEditorMode);
+  }, [sceneShotEditorMode]);
+
+  useEffect(() => {
+    if (selectedSectionId !== "scenes-shots") return;
+    const editorPanel = sceneShotEditorPanelRef.current;
+    if (!editorPanel) return;
+
+    const updateEditorWidth = () => {
+      setSceneShotEditorWidth(Math.round(editorPanel.getBoundingClientRect().width));
+    };
+
+    updateEditorWidth();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateEditorWidth);
+      return () => window.removeEventListener("resize", updateEditorWidth);
+    }
+
+    const resizeObserver = new ResizeObserver(updateEditorWidth);
+    resizeObserver.observe(editorPanel);
+    return () => resizeObserver.disconnect();
+  }, [isRightDockCollapsed, scenesShotsLayout.dock, scenesShotsLayout.editor, scenesShotsLayout.scenes, scenesShotsLayout.shots, selectedSectionId]);
 
   useEffect(() => {
     if (!selectedTimingBlockId || selectedSectionId !== "text-timing") return;
@@ -238,8 +391,74 @@ export default function App() {
     });
   }
 
-  async function handleSaveProjectTextTiming() {
-    await saveTextTimingDraft("Projekt bol uložený do project.llstory.json.");
+  async function handleSaveProjectDraft() {
+    await saveProjectDraft("Projekt bol uložený do project.llstory.json.");
+  }
+
+  function handleResetScenesShotsLayout() {
+    setScenesShotsLayout(defaultScenesShotsLayout);
+    setIsRightDockCollapsed(false);
+    setRightDockTab("inspector");
+    setSceneShotEditorMode("both");
+    setStatusMessage("Rozloženie pracovnej plochy bolo resetované.");
+  }
+
+  function handleStartScenesShotsResize(kind: ScenesShotsResizeKind, event: React.MouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startLayout = scenesShotsLayout;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+
+      setScenesShotsLayout(() => {
+        if (kind === "scenes-shots") {
+          return normalizeScenesShotsLayout({
+            ...startLayout,
+            scenes: startLayout.scenes + deltaX,
+            shots: startLayout.shots - deltaX,
+          });
+        }
+
+        if (kind === "shots-editor") {
+          return normalizeScenesShotsLayout({
+            ...startLayout,
+            shots: startLayout.shots + deltaX,
+            editor: startLayout.editor - deltaX,
+          });
+        }
+
+        if (kind === "scene-shot-editor") {
+          const editorWidth = sceneShotEditorPanelRef.current?.getBoundingClientRect().width ?? startLayout.editor;
+          const splitHandleWidth = 8;
+          const minimumShotEditorWidth = SHOT_EDITOR_MIN_WIDTH;
+          const maximumSceneEditorWidth = Math.max(
+            scenesShotsLayoutLimits.sceneEditor.min,
+            Math.min(scenesShotsLayoutLimits.sceneEditor.max, editorWidth - splitHandleWidth - minimumShotEditorWidth),
+          );
+
+          return normalizeScenesShotsLayout({
+            ...startLayout,
+            sceneEditor: Math.min(maximumSceneEditorWidth, startLayout.sceneEditor + deltaX),
+          });
+        }
+
+        return normalizeScenesShotsLayout({
+          ...startLayout,
+          dock: startLayout.dock - deltaX,
+        });
+      });
+    };
+
+    const handleMouseUp = () => {
+      document.body.classList.remove("is-resizing-columns");
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.body.classList.add("is-resizing-columns");
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
   }
 
   function recordDraftHistory() {
@@ -435,6 +654,117 @@ export default function App() {
     }
   }
 
+  async function handleCopyScenesShotsOverview() {
+    if (!scenesShotsOverview.trim()) {
+      setStatusMessage("Prehľad zatiaľ neobsahuje text na kopírovanie.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(scenesShotsOverview);
+      setStatusMessage("Prehľad scén a záberov bol skopírovaný do schránky.");
+    } catch {
+      setStatusMessage("Kopírovanie cez schránku nie je dostupné. Prehľad ostáva označiteľný ručne.");
+    }
+  }
+
+  function handleCreateScene() {
+    const scene = createEmptyScene(sceneDraft.length + 1);
+    setSceneDraft((currentScenes) => reorderItems([...currentScenes, scene]));
+    setSelectedSceneId(scene.id);
+    setSelectedShotId(null);
+    setStatusMessage("Scéna bola pridaná. Ulož projekt, aby sa zapísala do manifestu.");
+  }
+
+  function handleUpdateScene(id: string, field: SceneEditableField, value: string) {
+    setSceneDraft((currentScenes) =>
+      currentScenes.map((scene) =>
+        scene.id === id
+          ? {
+              ...scene,
+              [field]: nullableTimeField(field, value),
+              updatedAt: new Date().toISOString(),
+            }
+          : scene,
+      ),
+    );
+  }
+
+  function handleDeleteScene(id: string) {
+    const hasShots = shotDraft.some((shot) => shot.sceneId === id);
+    if (hasShots) {
+      setStatusMessage("Scénu nie je možné odstrániť, kým obsahuje zábery.");
+      return;
+    }
+
+    const confirmed = window.confirm("Odstrániť túto scénu?");
+    if (!confirmed) return;
+
+    const remainingScenes = reorderItems(sceneDraft.filter((scene) => scene.id !== id));
+    setSceneDraft(remainingScenes);
+    setSelectedSceneId((currentId) => (currentId === id ? remainingScenes[0]?.id ?? null : currentId));
+    setStatusMessage("Scéna bola odstránená. Ulož projekt, aby sa zmena zapísala.");
+  }
+
+  function handleMoveScene(id: string, direction: -1 | 1) {
+    const movedScenes = moveOrderedItem(sceneDraft, id, direction);
+    setSceneDraft(movedScenes);
+    setStatusMessage("Poradie scén bolo upravené. Ulož projekt, aby sa zmena zapísala.");
+  }
+
+  function handleCreateShot() {
+    if (!selectedScene) {
+      setStatusMessage("Najprv vytvor alebo vyber scénu.");
+      return;
+    }
+
+    const shot = createEmptyShot(selectedScene.id, selectedSceneShots.length + 1);
+    setShotDraft((currentShots) => reorderShots([...currentShots, shot]));
+    setSelectedShotId(shot.id);
+    setStatusMessage("Záber bol pridaný pod vybranú scénu. Ulož projekt, aby sa zapísal.");
+  }
+
+  function handleUpdateShot(id: string, field: ShotEditableField, value: string) {
+    setShotDraft((currentShots) =>
+      currentShots.map((shot) =>
+        shot.id === id
+          ? {
+              ...shot,
+              [field]: normalizeShotField(field, value),
+              updatedAt: new Date().toISOString(),
+            }
+          : shot,
+      ),
+    );
+  }
+
+  function handleDeleteShot(id: string) {
+    const confirmed = window.confirm("Odstrániť tento záber?");
+    if (!confirmed) return;
+
+    const shotToDelete = shotDraft.find((shot) => shot.id === id);
+    const remainingShots = reorderShots(shotDraft.filter((shot) => shot.id !== id));
+    setShotDraft(remainingShots);
+    setSelectedShotId((currentId) => {
+      if (currentId !== id) return currentId;
+      const sceneShots = remainingShots.filter((shot) => shot.sceneId === shotToDelete?.sceneId).sort(compareByOrder);
+      return sceneShots[0]?.id ?? null;
+    });
+    setStatusMessage("Záber bol odstránený. Ulož projekt, aby sa zmena zapísala.");
+  }
+
+  function handleMoveShot(id: string, direction: -1 | 1) {
+    const shot = shotDraft.find((item) => item.id === id);
+    if (!shot) return;
+
+    const sceneShots = shotDraft.filter((item) => item.sceneId === shot.sceneId);
+    const movedSceneShots = moveOrderedItem(sceneShots, id, direction);
+    setShotDraft((currentShots) =>
+      reorderShots(currentShots.map((item) => movedSceneShots.find((movedShot) => movedShot.id === item.id) ?? item)),
+    );
+    setStatusMessage("Poradie záberov bolo upravené. Ulož projekt, aby sa zmena zapísala.");
+  }
+
   function handleDeleteTimingBlock(id: string) {
     const confirmed = window.confirm("Odstrániť tento časový blok?");
     if (!confirmed) return;
@@ -536,7 +866,7 @@ export default function App() {
     setStatusMessage(successMessage);
   }
 
-  async function saveTextTimingDraft(successMessage: string) {
+  async function saveProjectDraft(successMessage: string) {
     const activeProject = project;
     if (!activeProject) {
       setStatusMessage("Najprv vytvor alebo otvor projektový balík.");
@@ -545,7 +875,13 @@ export default function App() {
 
     await runProjectAction(async () => {
       const savedProject = normalizeProjectPackage(
-        await saveProjectTextTiming(activeProject.folderPath, normalizeProjectText(textDraft), normalizeTimingBlocks(timingDraft)),
+        await saveProjectSections(
+          activeProject.folderPath,
+          normalizeProjectText(textDraft),
+          normalizeTimingBlocks(timingDraft),
+          normalizeScenes(sceneDraft),
+          normalizeShots(shotDraft),
+        ),
       );
       setProject(savedProject);
       rememberProject(savedProject);
@@ -565,7 +901,7 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={isRightDockCollapsed ? "app-shell right-dock-collapsed" : "app-shell"} style={appShellStyle}>
       <aside className="sidebar" aria-label="Produkčné sekcie">
         <div className="brand">
           <span className="brand-kicker">Lassi LAB</span>
@@ -599,8 +935,8 @@ export default function App() {
             <span>{selectedSection.label}</span>
           </div>
           <div className="topbar-actions">
-            <span className={project && hasUnsavedTextTimingChanges ? "dirty-pill" : "saved-pill"}>
-              {project ? (hasUnsavedTextTimingChanges ? "Neuložené zmeny" : "Uložené") : "Bez projektu"}
+            <span className={project && hasUnsavedProjectChanges ? "dirty-pill" : "saved-pill"}>
+              {project ? (hasUnsavedProjectChanges ? "Neuložené zmeny" : "Uložené") : "Bez projektu"}
             </span>
             {project && <span className="last-save">Naposledy uložené: {formatDate(project.updatedAt)}</span>}
             {project && isTextTimingWorkspace && (
@@ -623,9 +959,14 @@ export default function App() {
                 </button>
               </>
             )}
+            {project && isScenesShotsWorkspace && (
+              <button className="toolbar-secondary-button" onClick={handleResetScenesShotsLayout} type="button">
+                Reset rozloženia
+              </button>
+            )}
             <button
               disabled={!project || isBusy || !canUseProjectRuntime}
-              onClick={() => { void handleSaveProjectTextTiming(); }}
+              onClick={() => { void handleSaveProjectDraft(); }}
               type="button"
             >
               Uložiť
@@ -634,7 +975,7 @@ export default function App() {
         </header>
 
         <section
-          className={isTextTimingWorkspace ? "workspace workbench-workspace" : "workspace"}
+          className={isTextTimingWorkspace || isScenesShotsWorkspace ? "workspace workbench-workspace" : "workspace"}
           aria-label="Aktívna pracovná plocha"
         >
           {showProjectOverview && (
@@ -1087,7 +1428,379 @@ export default function App() {
             </section>
           )}
 
-          {!showProjectOverview && selectedSectionId !== "text-timing" && (
+          {selectedSectionId === "scenes-shots" && (
+            <section className="scenes-shots-section" style={scenesShotsSectionStyle} aria-label="Scény a zábery">
+              {project ? (
+                <>
+                  <section className="scene-list-panel" aria-label="Scény">
+                    <div className="panel-header">
+                      <div>
+                        <p className="eyebrow">Scény</p>
+                        <h3>Príbehové jednotky</h3>
+                        <p className="dock-summary">{orderedScenes.length} scén</p>
+                      </div>
+                      <button disabled={isBusy || !canUseProjectRuntime} onClick={handleCreateScene} type="button">
+                        Pridať scénu
+                      </button>
+                    </div>
+
+                    {orderedScenes.length === 0 ? (
+                      <p className="empty-state">Zatiaľ nie sú vytvorené žiadne scény.</p>
+                    ) : (
+                      <div className="scene-list">
+                        {orderedScenes.map((scene, index) => {
+                          const shotCount = shotDraft.filter((shot) => shot.sceneId === scene.id).length;
+
+                          return (
+                            <div
+                              className={scene.id === selectedScene?.id ? "scene-row active" : "scene-row"}
+                              key={scene.id}
+                              onClick={() => {
+                                setSelectedSceneId(scene.id);
+                                const firstShot = shotDraft.filter((shot) => shot.sceneId === scene.id).sort(compareByOrder)[0];
+                                setSelectedShotId(firstShot?.id ?? null);
+                              }}
+                              role="button"
+                              tabIndex={0}
+                            >
+                              <div>
+                                <strong title={scene.title || undefined}>
+                                  {scene.title ? `${index + 1}. ${scene.title}` : `Scéna ${index + 1}`}
+                                </strong>
+                                <span>{shotCount} záberov</span>
+                              </div>
+                              <div className="row-actions">
+                                <button
+                                  className="secondary-button"
+                                  disabled={index === 0}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleMoveScene(scene.id, -1);
+                                  }}
+                                  type="button"
+                                >
+                                  Hore
+                                </button>
+                                <button
+                                  className="secondary-button"
+                                  disabled={index === orderedScenes.length - 1}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleMoveScene(scene.id, 1);
+                                  }}
+                                  type="button"
+                                >
+                                  Dole
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+
+                  <div
+                    aria-label="Zmeniť šírku scén a záberov"
+                    className="column-resize-handle"
+                    onMouseDown={(event) => handleStartScenesShotsResize("scenes-shots", event)}
+                    role="separator"
+                  />
+
+                  <section className="shot-list-panel" aria-label="Zábery">
+                    <div className="panel-header">
+                      <div>
+                        <p className="eyebrow">Zábery</p>
+                        <h3>{selectedScene ? selectedScene.title || "Vybraná scéna" : "Vyber scénu"}</h3>
+                        <p className="dock-summary">{selectedSceneShots.length} záberov v scéne</p>
+                      </div>
+                      <button disabled={!selectedScene || isBusy || !canUseProjectRuntime} onClick={handleCreateShot} type="button">
+                        Pridať záber
+                      </button>
+                    </div>
+
+                    {!selectedScene ? (
+                      <p className="empty-state">Najprv vytvor alebo vyber scénu.</p>
+                    ) : selectedSceneShots.length === 0 ? (
+                      <p className="empty-state">Táto scéna zatiaľ nemá žiadne zábery.</p>
+                    ) : (
+                      <div className="shot-list">
+                        {selectedSceneShots.map((shot, index) => (
+                          <div
+                            className={shot.id === selectedShot?.id ? "shot-row active" : "shot-row"}
+                            key={shot.id}
+                            onClick={() => setSelectedShotId(shot.id)}
+                            role="button"
+                            tabIndex={0}
+                          >
+                            <div>
+                              <strong title={shot.title || undefined}>
+                                {shot.title ? `${index + 1}. ${shot.title}` : `Záber ${index + 1}`}
+                              </strong>
+                              <span>{shot.visualIntent || shot.description || "Tvorivý zámer zatiaľ nie je vyplnený"}</span>
+                            </div>
+                            <span className="status-pill">{shotStatusLabel(shot.status)}</span>
+                            <div className="row-actions">
+                              <button
+                                className="secondary-button"
+                                disabled={index === 0}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveShot(shot.id, -1);
+                                }}
+                                type="button"
+                              >
+                                Hore
+                              </button>
+                              <button
+                                className="secondary-button"
+                                disabled={index === selectedSceneShots.length - 1}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveShot(shot.id, 1);
+                                }}
+                                type="button"
+                              >
+                                Dole
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  <div
+                    aria-label="Zmeniť šírku záberov a editora"
+                    className="column-resize-handle"
+                    onMouseDown={(event) => handleStartScenesShotsResize("shots-editor", event)}
+                    role="separator"
+                  />
+
+                  <section className="scene-shot-editor-container" aria-label="Editor scény a záberu">
+                    <div className="editor-visibility-bar">
+                      <div>
+                        <p className="eyebrow">Editor</p>
+                        <h3>
+                          {sceneShotEditorMode === "scene"
+                            ? "Editor scény"
+                            : sceneShotEditorMode === "shot"
+                              ? "Editor záberu"
+                              : "Editor scény a záberu"}
+                        </h3>
+                      </div>
+                      <div className="panel-mode-actions" role="group" aria-label="Viditeľnosť editorov">
+                        <button
+                          aria-pressed={sceneShotEditorMode === "both"}
+                          className={sceneShotEditorMode === "both" ? "mode-button active" : "mode-button"}
+                          onClick={() => setSceneShotEditorMode("both")}
+                          type="button"
+                        >
+                          Oboje
+                        </button>
+                        <button
+                          aria-pressed={sceneShotEditorMode === "scene"}
+                          className={sceneShotEditorMode === "scene" ? "mode-button active" : "mode-button"}
+                          onClick={() => setSceneShotEditorMode("scene")}
+                          type="button"
+                        >
+                          Scéna
+                        </button>
+                        <button
+                          aria-pressed={sceneShotEditorMode === "shot"}
+                          className={sceneShotEditorMode === "shot" ? "mode-button active" : "mode-button"}
+                          onClick={() => setSceneShotEditorMode("shot")}
+                          type="button"
+                        >
+                          Záber
+                        </button>
+                      </div>
+                    </div>
+
+                    <div
+                      className={[
+                        "scene-shot-editor-panel",
+                        isSceneShotEditorStacked ? "stacked" : "",
+                        `mode-${sceneShotEditorMode}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      ref={sceneShotEditorPanelRef}
+                      aria-label="Editor scény a záberu"
+                    >
+                    {isSceneEditorVisible && selectedScene ? (
+                      <div className="editor-group scene-editor-group">
+                        <div className="panel-header compact">
+                          <div>
+                            <p className="eyebrow">Editor scény</p>
+                            <h3>{selectedScene.title || "Nová scéna"}</h3>
+                          </div>
+                          <button
+                            className="delete-button"
+                            disabled={shotDraft.some((shot) => shot.sceneId === selectedScene.id)}
+                            onClick={() => handleDeleteScene(selectedScene.id)}
+                            type="button"
+                          >
+                            Odstrániť scénu
+                          </button>
+                        </div>
+                        <label>
+                          <span>Názov scény</span>
+                          <input
+                            value={selectedScene.title}
+                            onChange={(event) => handleUpdateScene(selectedScene.id, "title", event.target.value)}
+                            placeholder="Scene 01 – Sucho"
+                          />
+                        </label>
+                        <label>
+                          <span>Opis</span>
+                          <textarea
+                            className="editor-textarea-medium"
+                            value={selectedScene.description}
+                            wrap="soft"
+                            onChange={(event) => handleUpdateScene(selectedScene.id, "description", event.target.value)}
+                            placeholder="Príbehový alebo emočný opis scény."
+                          />
+                        </label>
+                        <div className="editor-field-row">
+                          <label>
+                            <span>Začiatok</span>
+                            <input
+                              value={selectedScene.startTime ?? ""}
+                              onChange={(event) => handleUpdateScene(selectedScene.id, "startTime", event.target.value)}
+                              placeholder="00:00"
+                            />
+                          </label>
+                          <label>
+                            <span>Koniec</span>
+                            <input
+                              value={selectedScene.endTime ?? ""}
+                              onChange={(event) => handleUpdateScene(selectedScene.id, "endTime", event.target.value)}
+                              placeholder="00:30"
+                            />
+                          </label>
+                        </div>
+                        <label>
+                          <span>Poznámky</span>
+                          <textarea
+                            className="editor-textarea-medium"
+                            value={selectedScene.notes}
+                            wrap="soft"
+                            onChange={(event) => handleUpdateScene(selectedScene.id, "notes", event.target.value)}
+                            placeholder="Poznámky k scéne."
+                          />
+                        </label>
+                      </div>
+                    ) : isSceneEditorVisible ? (
+                      <p className="empty-state">Vyber alebo vytvor scénu.</p>
+                    ) : null}
+
+                    {sceneShotEditorMode === "both" && (
+                      <div
+                        aria-label="Zmeniť šírku editorov scény a záberu"
+                        className="editor-split-handle"
+                        onMouseDown={(event) => handleStartScenesShotsResize("scene-shot-editor", event)}
+                        role="separator"
+                      />
+                    )}
+
+                    {isShotEditorVisible && selectedShot ? (
+                      <div className="editor-group shot-editor-group">
+                        <div className="panel-header compact">
+                          <div>
+                            <p className="eyebrow">Editor záberu</p>
+                            <h3>{selectedShot.title || "Nový záber"}</h3>
+                          </div>
+                          <button className="delete-button" onClick={() => handleDeleteShot(selectedShot.id)} type="button">
+                            Odstrániť záber
+                          </button>
+                        </div>
+                        <label>
+                          <span>Názov záberu</span>
+                          <input
+                            value={selectedShot.title}
+                            onChange={(event) => handleUpdateShot(selectedShot.id, "title", event.target.value)}
+                            placeholder="Bosá noha vstupuje do hliny"
+                          />
+                        </label>
+                        <label>
+                          <span>Tvorivý zámer</span>
+                          <textarea
+                            className="editor-textarea-medium"
+                            value={selectedShot.visualIntent}
+                            wrap="soft"
+                            onChange={(event) => handleUpdateShot(selectedShot.id, "visualIntent", event.target.value)}
+                            placeholder="Aký obraz alebo myšlienku má záber niesť?"
+                          />
+                        </label>
+                        <label>
+                          <span>Opis</span>
+                          <textarea
+                            className="editor-textarea-large"
+                            value={selectedShot.description}
+                            wrap="soft"
+                            onChange={(event) => handleUpdateShot(selectedShot.id, "description", event.target.value)}
+                            placeholder="Krátky opis plánovaného obrazu."
+                          />
+                        </label>
+                        <div className="editor-field-row">
+                          <label>
+                            <span>Emócia</span>
+                            <input
+                              value={selectedShot.emotion}
+                              onChange={(event) => handleUpdateShot(selectedShot.id, "emotion", event.target.value)}
+                              placeholder="ticho, smútok, prijatie"
+                            />
+                          </label>
+                          <label>
+                            <span>Stav</span>
+                            <select
+                              value={selectedShot.status}
+                              onChange={(event) => handleUpdateShot(selectedShot.id, "status", event.target.value)}
+                            >
+                              {shotStatusOptions.map((status) => (
+                                <option key={status.value} value={status.value}>
+                                  {status.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <label>
+                          <span>Motívy</span>
+                          <input
+                            value={selectedShot.motifs.join(", ")}
+                            onChange={(event) => handleUpdateShot(selectedShot.id, "motifs", event.target.value)}
+                            placeholder="voda, hlina, črep"
+                          />
+                        </label>
+                        <label>
+                          <span>Poznámky</span>
+                          <textarea
+                            className="editor-textarea-large"
+                            value={selectedShot.notes}
+                            wrap="soft"
+                            onChange={(event) => handleUpdateShot(selectedShot.id, "notes", event.target.value)}
+                            placeholder="Poznámky k záberu."
+                          />
+                        </label>
+                      </div>
+                    ) : isShotEditorVisible ? (
+                      <p className="empty-state">Vyber alebo vytvor záber pod vybranou scénou.</p>
+                    ) : null}
+                    </div>
+                  </section>
+                </>
+              ) : (
+                <section className="section-empty-panel workbench-empty">
+                  <h3>Najprv vytvor alebo otvor projektový balík.</h3>
+                  <p>Scény a zábery sa ukladajú do project.llstory.json v otvorenom projektovom priečinku.</p>
+                </section>
+              )}
+            </section>
+          )}
+
+          {!showProjectOverview && selectedSectionId !== "text-timing" && selectedSectionId !== "scenes-shots" && (
             <section className="section-empty-panel workbench-empty">
               <p className="eyebrow">{selectedSection.label}</p>
               <h3>{project ? selectedSection.label : "Najprv vytvor alebo otvor projektový balík."}</h3>
@@ -1107,7 +1820,72 @@ export default function App() {
         </footer>
       </section>
 
-      <aside className="inspector" aria-label="Inšpektor">
+      <aside
+        className={isRightDockCollapsed ? "inspector right-dock collapsed" : "inspector right-dock"}
+        aria-label="Pravý dock"
+      >
+        {isRightDockCollapsed ? (
+          <button className="dock-restore-button" onClick={() => setIsRightDockCollapsed(false)} type="button">
+            Dock
+          </button>
+        ) : (
+          <>
+            {isScenesShotsWorkspace && (
+              <div
+                aria-label="Zmeniť šírku pravého docku"
+                className="right-dock-resize-handle"
+                onMouseDown={(event) => handleStartScenesShotsResize("right-dock", event)}
+                role="separator"
+              />
+            )}
+            <div className="right-dock-top">
+              <div className="right-dock-tabs" role="tablist" aria-label="Pravý dock">
+                <button
+                  aria-selected={rightDockTab === "inspector"}
+                  className={rightDockTab === "inspector" ? "dock-tab active" : "dock-tab"}
+                  onClick={() => setRightDockTab("inspector")}
+                  role="tab"
+                  type="button"
+                >
+                  Inšpektor
+                </button>
+                <button
+                  aria-selected={rightDockTab === "overview"}
+                  className={rightDockTab === "overview" ? "dock-tab active" : "dock-tab"}
+                  onClick={() => setRightDockTab("overview")}
+                  role="tab"
+                  type="button"
+                >
+                  Prehľad
+                </button>
+              </div>
+              <button className="dock-collapse-button" onClick={() => setIsRightDockCollapsed(true)} type="button">
+                Skryť
+              </button>
+            </div>
+
+            {rightDockTab === "overview" ? (
+              <section className="overview-panel" aria-label="Prehľad scén a záberov">
+                <div className="dock-context">
+                  <strong>{project?.title ?? "Bez otvoreného projektu"}</strong>
+                  <span>Scény a zábery</span>
+                </div>
+                <button
+                  className="secondary-button"
+                  disabled={!project || !scenesShotsOverview.trim()}
+                  onClick={() => { void handleCopyScenesShotsOverview(); }}
+                  type="button"
+                >
+                  Kopírovať prehľad
+                </button>
+                <pre className="overview-text">{scenesShotsOverview}</pre>
+              </section>
+            ) : (
+              <section className="inspector-panel" aria-label="Inšpektor">
+                <div className="dock-context">
+                  <strong>{project?.title ?? "Bez otvoreného projektu"}</strong>
+                  <span>{selectedSection.label}</span>
+                </div>
         <p className="eyebrow">Inšpektor</p>
         {project && isTextTimingWorkspace ? (
           <>
@@ -1210,16 +1988,31 @@ export default function App() {
         ) : (
           <>
             <h2>{project ? project.title : "Vybraná položka"}</h2>
-            <div className="inspector-body">
+            <div className="inspector-body compact">
               <span className="field-label">Sekcia</span>
               <strong>{selectedSection.label}</strong>
-              <span className="field-label">ID projektu</span>
-              <strong>{project?.projectId ?? "Žiadny projekt nie je otvorený"}</strong>
               <span className="field-label">Stav</span>
               <strong>{project ? "Projektový balík je otvorený" : selectedSection.summary}</strong>
-              <span className="field-label">Úloha manifestu</span>
-              <strong>{project ? `Schéma ${project.schemaVersion}` : "Pripravené pre budúce metadáta"}</strong>
             </div>
+            <details className="project-details">
+              <summary>Detaily projektu</summary>
+              <div className="inspector-body compact">
+                <span className="field-label">ID projektu</span>
+                <strong>{project?.projectId ?? "Žiadny projekt nie je otvorený"}</strong>
+                <span className="field-label">Úloha manifestu</span>
+                <strong>{project ? `Schéma ${project.schemaVersion}` : "Pripravené pre budúce metadáta"}</strong>
+                {project && (
+                  <>
+                    <span className="field-label">Projektový priečinok</span>
+                    <strong>{project.folderPath}</strong>
+                  </>
+                )}
+              </div>
+            </details>
+          </>
+        )}
+              </section>
+            )}
           </>
         )}
       </aside>
@@ -1269,6 +2062,106 @@ function writeLastProject(projectToSave: LastProject) {
   }
 }
 
+function readRightDockState(): RightDockState {
+  if (typeof window === "undefined") {
+    return {
+      selectedTab: "inspector",
+      collapsed: false,
+    };
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(RIGHT_DOCK_STORAGE_KEY);
+    if (!storedValue) {
+      return {
+        selectedTab: "inspector",
+        collapsed: false,
+      };
+    }
+
+    const parsedValue = JSON.parse(storedValue) as Partial<RightDockState>;
+    return {
+      selectedTab: parsedValue.selectedTab === "overview" ? "overview" : "inspector",
+      collapsed: Boolean(parsedValue.collapsed),
+    };
+  } catch {
+    return {
+      selectedTab: "inspector",
+      collapsed: false,
+    };
+  }
+}
+
+function writeRightDockState(state: RightDockState) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(RIGHT_DOCK_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Dock layout is only a local UI preference.
+  }
+}
+
+function readScenesShotsLayout(): ScenesShotsLayout {
+  if (typeof window === "undefined") return defaultScenesShotsLayout;
+
+  try {
+    const storedValue = window.localStorage.getItem(SCENES_SHOTS_LAYOUT_STORAGE_KEY);
+    if (!storedValue) return defaultScenesShotsLayout;
+
+    return normalizeScenesShotsLayout(JSON.parse(storedValue) as Partial<ScenesShotsLayout>);
+  } catch {
+    return defaultScenesShotsLayout;
+  }
+}
+
+function writeScenesShotsLayout(layout: ScenesShotsLayout) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(SCENES_SHOTS_LAYOUT_STORAGE_KEY, JSON.stringify(normalizeScenesShotsLayout(layout)));
+  } catch {
+    // Resizable panels are only a local UI preference.
+  }
+}
+
+function readSceneShotEditorMode(): SceneShotEditorMode {
+  if (typeof window === "undefined") return "both";
+
+  try {
+    const storedValue = window.localStorage.getItem(SCENE_SHOT_EDITOR_MODE_STORAGE_KEY);
+    return storedValue === "scene" || storedValue === "shot" ? storedValue : "both";
+  } catch {
+    return "both";
+  }
+}
+
+function writeSceneShotEditorMode(mode: SceneShotEditorMode) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(SCENE_SHOT_EDITOR_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Editor visibility is only a local UI preference.
+  }
+}
+
+function normalizeScenesShotsLayout(layout: Partial<ScenesShotsLayout>): ScenesShotsLayout {
+  return {
+    scenes: clampColumnWidth(layout.scenes, "scenes"),
+    shots: clampColumnWidth(layout.shots, "shots"),
+    editor: clampColumnWidth(layout.editor, "editor"),
+    sceneEditor: clampColumnWidth(layout.sceneEditor, "sceneEditor"),
+    dock: clampColumnWidth(layout.dock, "dock"),
+  };
+}
+
+function clampColumnWidth(value: unknown, column: keyof ScenesShotsLayout) {
+  const numericValue = typeof value === "number" && Number.isFinite(value) ? value : defaultScenesShotsLayout[column];
+  const limits = scenesShotsLayoutLimits[column];
+  return Math.min(limits.max, Math.max(limits.min, Math.round(numericValue)));
+}
+
 function createEmptyTimingBlock(): TimingBlock {
   return {
     id: makeTimingBlockId(),
@@ -1284,11 +2177,53 @@ function createEmptyTimingBlock(): TimingBlock {
   };
 }
 
+function createEmptyScene(order: number): Scene {
+  const timestamp = new Date().toISOString();
+
+  return {
+    id: makeEntityId("scene"),
+    title: "",
+    description: "",
+    notes: "",
+    startTime: null,
+    endTime: null,
+    order,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function createEmptyShot(sceneId: string, order: number): Shot {
+  const timestamp = new Date().toISOString();
+
+  return {
+    id: makeEntityId("shot"),
+    sceneId,
+    title: "",
+    description: "",
+    visualIntent: "",
+    emotion: "",
+    motifs: [],
+    notes: "",
+    status: "draft",
+    order,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
 function normalizeProjectPackage(projectPackage: ProjectPackage): ProjectPackage {
   return {
     ...projectPackage,
     text: normalizeProjectText(projectPackage.text),
     timing: normalizeTimingBlocks(projectPackage.timing),
+    scenes: normalizeScenes(projectPackage.scenes),
+    shots: normalizeShots(projectPackage.shots),
+    counts: {
+      ...projectPackage.counts,
+      scenes: normalizeScenes(projectPackage.scenes).length,
+      shots: normalizeShots(projectPackage.shots).length,
+    },
   };
 }
 
@@ -1315,6 +2250,110 @@ function normalizeTimingBlocks(timing: Partial<TimingBlock>[] | null | undefined
     linkedAssetIds: Array.isArray(block.linkedAssetIds) ? block.linkedAssetIds : [],
     linkedOutputIds: Array.isArray(block.linkedOutputIds) ? block.linkedOutputIds : [],
   }));
+}
+
+function normalizeScenes(scenes: Partial<Scene>[] | null | undefined): Scene[] {
+  if (!Array.isArray(scenes)) return [];
+
+  return reorderItems(
+    scenes.map((scene, index) => ({
+      id: typeof scene.id === "string" && scene.id.trim() ? scene.id : makeEntityId("scene"),
+      title: typeof scene.title === "string" ? scene.title : "",
+      description: typeof scene.description === "string" ? scene.description : "",
+      notes: typeof scene.notes === "string" ? scene.notes : "",
+      startTime: typeof scene.startTime === "string" && scene.startTime.trim() ? scene.startTime : null,
+      endTime: typeof scene.endTime === "string" && scene.endTime.trim() ? scene.endTime : null,
+      order: typeof scene.order === "number" && Number.isFinite(scene.order) ? scene.order : index + 1,
+      createdAt: typeof scene.createdAt === "string" ? scene.createdAt : "",
+      updatedAt: typeof scene.updatedAt === "string" ? scene.updatedAt : "",
+    })),
+  );
+}
+
+function normalizeShots(shots: Partial<Shot>[] | null | undefined): Shot[] {
+  if (!Array.isArray(shots)) return [];
+
+  return reorderShots(
+    shots.map((shot, index) => ({
+      id: typeof shot.id === "string" && shot.id.trim() ? shot.id : makeEntityId("shot"),
+      sceneId: typeof shot.sceneId === "string" ? shot.sceneId : "",
+      title: typeof shot.title === "string" ? shot.title : "",
+      description: typeof shot.description === "string" ? shot.description : "",
+      visualIntent: typeof shot.visualIntent === "string" ? shot.visualIntent : "",
+      emotion: typeof shot.emotion === "string" ? shot.emotion : "",
+      motifs: Array.isArray(shot.motifs) ? shot.motifs.filter((motif) => typeof motif === "string") : [],
+      notes: typeof shot.notes === "string" ? shot.notes : "",
+      status: isShotStatus(shot.status) ? shot.status : "draft",
+      order: typeof shot.order === "number" && Number.isFinite(shot.order) ? shot.order : index + 1,
+      createdAt: typeof shot.createdAt === "string" ? shot.createdAt : "",
+      updatedAt: typeof shot.updatedAt === "string" ? shot.updatedAt : "",
+    })),
+  );
+}
+
+function nullableTimeField(field: SceneEditableField, value: string) {
+  if (field === "startTime" || field === "endTime") {
+    return value.trim() ? value : null;
+  }
+
+  return value;
+}
+
+function normalizeShotField(field: ShotEditableField, value: string) {
+  if (field === "motifs") {
+    return value
+      .split(",")
+      .map((motif) => motif.trim())
+      .filter(Boolean);
+  }
+
+  if (field === "status") {
+    return isShotStatus(value) ? value : "draft";
+  }
+
+  return value;
+}
+
+function isShotStatus(value: unknown): value is ShotStatus {
+  return value === "draft" || value === "approved" || value === "used" || value === "rejected" || value === "archived";
+}
+
+function shotStatusLabel(status: ShotStatus) {
+  return shotStatusOptions.find((option) => option.value === status)?.label ?? "Návrh";
+}
+
+function compareByOrder<T extends { order: number }>(firstItem: T, secondItem: T) {
+  return firstItem.order - secondItem.order;
+}
+
+function reorderItems<T extends { order: number }>(items: T[]): T[] {
+  return [...items].sort(compareByOrder).map((item, index) => ({ ...item, order: index + 1 }));
+}
+
+function reorderShots(shots: Shot[]): Shot[] {
+  const groupedShots = new Map<string, Shot[]>();
+  for (const shot of shots) {
+    groupedShots.set(shot.sceneId, [...(groupedShots.get(shot.sceneId) ?? []), shot]);
+  }
+
+  return shots.map((shot) => {
+    const reorderedGroup = reorderItems(groupedShots.get(shot.sceneId) ?? []);
+    return reorderedGroup.find((item) => item.id === shot.id) ?? shot;
+  });
+}
+
+function moveOrderedItem<T extends { id: string; order: number }>(items: T[], id: string, direction: -1 | 1): T[] {
+  const orderedItems = [...items].sort(compareByOrder);
+  const currentIndex = orderedItems.findIndex((item) => item.id === id);
+  const targetIndex = currentIndex + direction;
+  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedItems.length) {
+    return reorderItems(orderedItems);
+  }
+
+  const movedItems = [...orderedItems];
+  const [movedItem] = movedItems.splice(currentIndex, 1);
+  movedItems.splice(targetIndex, 0, movedItem);
+  return reorderItems(movedItems);
 }
 
 function normalizeTextLineForMatch(value: string) {
@@ -1458,6 +2497,53 @@ function buildExactTextFromTiming(timing: TimingBlock[]) {
     .join("\n");
 }
 
+function buildScenesShotsOverview(projectTitle: string, scenes: Scene[], shots: Shot[]) {
+  const orderedScenes = normalizeScenes(scenes);
+  const normalizedShots = normalizeShots(shots);
+  const lines = [projectTitle.trim() || "Bez otvoreného projektu", ""];
+
+  if (orderedScenes.length === 0) {
+    lines.push("Zatiaľ nie sú vytvorené žiadne scény.");
+    return lines.join("\n");
+  }
+
+  orderedScenes.forEach((scene, sceneIndex) => {
+    const sceneTitle = scene.title.trim() || `Scéna ${sceneIndex + 1}`;
+    const timeRange = formatOptionalTimeRange(scene.startTime, scene.endTime);
+    lines.push(`${sceneIndex + 1}. ${sceneTitle}${timeRange ? ` (${timeRange})` : ""}`);
+    if (scene.description.trim()) lines.push(`   Opis: ${scene.description.trim()}`);
+    if (scene.notes.trim()) lines.push(`   Poznámky: ${scene.notes.trim()}`);
+
+    const sceneShots = normalizedShots.filter((shot) => shot.sceneId === scene.id).sort(compareByOrder);
+    if (sceneShots.length === 0) {
+      lines.push("   Zatiaľ bez záberov.");
+    } else {
+      sceneShots.forEach((shot, shotIndex) => {
+        lines.push(`   ${sceneIndex + 1}.${shotIndex + 1} ${shot.title.trim() || `Záber ${shotIndex + 1}`}`);
+        if (shot.visualIntent.trim()) lines.push(`       Tvorivý zámer: ${shot.visualIntent.trim()}`);
+        if (shot.description.trim()) lines.push(`       Opis: ${shot.description.trim()}`);
+        if (shot.emotion.trim()) lines.push(`       Emócia: ${shot.emotion.trim()}`);
+        if (shot.motifs.length > 0) lines.push(`       Motívy: ${shot.motifs.join(", ")}`);
+        lines.push(`       Stav: ${shotStatusLabel(shot.status)}`);
+        if (shot.notes.trim()) lines.push(`       Poznámky: ${shot.notes.trim()}`);
+      });
+    }
+
+    if (sceneIndex < orderedScenes.length - 1) lines.push("");
+  });
+
+  return lines.join("\n");
+}
+
+function formatOptionalTimeRange(startTime: string | null, endTime: string | null) {
+  const start = startTime?.trim() ?? "";
+  const end = endTime?.trim() ?? "";
+  if (start && end) return `${start} - ${end}`;
+  if (start) return `od ${start}`;
+  if (end) return `do ${end}`;
+  return "";
+}
+
 function compareProjectTextWithTimingText(projectText: string, timingText: string): FinalTextTimingCheck {
   if (projectText === timingText) {
     return {
@@ -1557,10 +2643,49 @@ function timingBlocksForComparison(timing: Partial<TimingBlock>[] | null | undef
   }));
 }
 
+function scenesForComparison(scenes: Partial<Scene>[] | null | undefined) {
+  return normalizeScenes(scenes).map((scene) => ({
+    id: scene.id,
+    title: scene.title,
+    description: scene.description,
+    notes: scene.notes,
+    startTime: scene.startTime,
+    endTime: scene.endTime,
+    order: scene.order,
+    createdAt: scene.createdAt,
+    updatedAt: scene.updatedAt,
+  }));
+}
+
+function shotsForComparison(shots: Partial<Shot>[] | null | undefined) {
+  return normalizeShots(shots).map((shot) => ({
+    id: shot.id,
+    sceneId: shot.sceneId,
+    title: shot.title,
+    description: shot.description,
+    visualIntent: shot.visualIntent,
+    emotion: shot.emotion,
+    motifs: shot.motifs,
+    notes: shot.notes,
+    status: shot.status,
+    order: shot.order,
+    createdAt: shot.createdAt,
+    updatedAt: shot.updatedAt,
+  }));
+}
+
 function makeTimingBlockId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `timing_${crypto.randomUUID()}`;
   }
 
   return `timing_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function makeEntityId(prefix: "scene" | "shot") {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}_${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }

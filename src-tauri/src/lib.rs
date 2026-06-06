@@ -43,6 +43,19 @@ struct SaveTextTimingRequest {
     folder_path: String,
     text: ProjectText,
     timing: Vec<TimingBlock>,
+    scenes: Option<Vec<Scene>>,
+    shots: Option<Vec<Shot>>,
+    timestamp: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveProjectSectionsRequest {
+    folder_path: String,
+    text: ProjectText,
+    timing: Vec<TimingBlock>,
+    scenes: Vec<Scene>,
+    shots: Vec<Shot>,
     timestamp: String,
 }
 
@@ -66,6 +79,8 @@ struct ProjectPackage {
     updated_at: String,
     text: ProjectText,
     timing: Vec<TimingBlock>,
+    scenes: Vec<Scene>,
+    shots: Vec<Shot>,
     counts: ProjectCounts,
 }
 
@@ -103,6 +118,58 @@ struct TimingBlock {
     linked_asset_ids: Vec<String>,
     #[serde(default)]
     linked_output_ids: Vec<String>,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Scene {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    notes: String,
+    #[serde(default)]
+    start_time: Option<String>,
+    #[serde(default)]
+    end_time: Option<String>,
+    #[serde(default)]
+    order: u64,
+    #[serde(default)]
+    created_at: String,
+    #[serde(default)]
+    updated_at: String,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Shot {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    scene_id: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    visual_intent: String,
+    #[serde(default)]
+    emotion: String,
+    #[serde(default)]
+    motifs: Vec<String>,
+    #[serde(default)]
+    notes: String,
+    #[serde(default)]
+    status: String,
+    #[serde(default)]
+    order: u64,
+    #[serde(default)]
+    created_at: String,
+    #[serde(default)]
+    updated_at: String,
 }
 
 #[derive(Default, Serialize)]
@@ -191,6 +258,49 @@ fn save_text_timing(request: SaveTextTimingRequest) -> Result<ProjectPackage, St
         .map_err(|error| format!("Nepodarilo sa pripraviť text pre manifest: {error}"))?;
     manifest["timing"] = serde_json::to_value(request.timing)
         .map_err(|error| format!("Nepodarilo sa pripraviť časovanie pre manifest: {error}"))?;
+    if let Some(scenes) = request.scenes {
+        manifest["scenes"] = serde_json::to_value(scenes)
+            .map_err(|error| format!("Nepodarilo sa pripraviť scény pre manifest: {error}"))?;
+    }
+    if let Some(shots) = request.shots {
+        manifest["shots"] = serde_json::to_value(shots)
+            .map_err(|error| format!("Nepodarilo sa pripraviť zábery pre manifest: {error}"))?;
+    }
+    manifest["updatedAt"] = Value::String(timestamp.to_string());
+
+    write_manifest(&project_dir, &manifest)?;
+    manifest_summary(&project_dir, &manifest)
+}
+
+#[tauri::command]
+fn save_project_sections(request: SaveProjectSectionsRequest) -> Result<ProjectPackage, String> {
+    let project_dir = normalize_project_dir(&request.folder_path)?;
+    if !project_dir.exists() {
+        return Err("Priečinok projektu neexistuje.".to_string());
+    }
+    if !project_dir.is_dir() {
+        return Err("Cesta projektu musí byť priečinok.".to_string());
+    }
+
+    let timestamp = request.timestamp.trim();
+    if timestamp.is_empty() {
+        return Err("Čas uloženia je povinný.".to_string());
+    }
+
+    let mut manifest = read_manifest(&project_dir)?;
+    validate_manifest(&manifest)?;
+
+    let mut text = request.text;
+    text.updated_at = timestamp.to_string();
+
+    manifest["text"] = serde_json::to_value(text)
+        .map_err(|error| format!("Nepodarilo sa pripraviť text pre manifest: {error}"))?;
+    manifest["timing"] = serde_json::to_value(request.timing)
+        .map_err(|error| format!("Nepodarilo sa pripraviť časovanie pre manifest: {error}"))?;
+    manifest["scenes"] = serde_json::to_value(request.scenes)
+        .map_err(|error| format!("Nepodarilo sa pripraviť scény pre manifest: {error}"))?;
+    manifest["shots"] = serde_json::to_value(request.shots)
+        .map_err(|error| format!("Nepodarilo sa pripraviť zábery pre manifest: {error}"))?;
     manifest["updatedAt"] = Value::String(timestamp.to_string());
 
     write_manifest(&project_dir, &manifest)?;
@@ -214,6 +324,7 @@ pub fn run() {
             create_project_package,
             open_project_package,
             save_text_timing,
+            save_project_sections,
             read_text_timing_file
         ])
         .run(tauri::generate_context!())
@@ -389,6 +500,8 @@ fn manifest_summary(project_dir: &Path, manifest: &Value) -> Result<ProjectPacka
         updated_at: string_field(manifest, "updatedAt")?,
         text: text_from_manifest(manifest),
         timing: timing_from_manifest(manifest),
+        scenes: scenes_from_manifest(manifest),
+        shots: shots_from_manifest(manifest),
         counts: ProjectCounts {
             scenes: array_count(manifest, "scenes"),
             shots: array_count(manifest, "shots"),
@@ -414,6 +527,32 @@ fn timing_from_manifest(manifest: &Value) -> Vec<TimingBlock> {
             items
                 .iter()
                 .filter_map(|item| serde_json::from_value::<TimingBlock>(item.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn scenes_from_manifest(manifest: &Value) -> Vec<Scene> {
+    manifest
+        .get("scenes")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| serde_json::from_value::<Scene>(item.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn shots_from_manifest(manifest: &Value) -> Vec<Shot> {
+    manifest
+        .get("shots")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| serde_json::from_value::<Shot>(item.clone()).ok())
                 .collect()
         })
         .unwrap_or_default()

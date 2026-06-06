@@ -132,7 +132,7 @@ Timing blocks are lightweight text/time rows. They are not a video timeline. The
 
 ### Scene
 
-Draft definition:
+Implemented v1 definition:
 
 Scene is a narrative/story unit inside a visual storytelling project. It groups shots that belong together by story beat, location, emotional phase, visual chapter or production logic.
 
@@ -144,15 +144,17 @@ Scene is a narrative/story unit inside a visual storytelling project. It groups 
   "notes": "",
   "startTime": null,
   "endTime": null,
-  "order": 1
+  "order": 1,
+  "createdAt": "2026-06-06T10:00:00.000Z",
+  "updatedAt": "2026-06-06T10:00:00.000Z"
 }
 ```
 
 ### Shot
 
-Draft definition:
+Implemented v1 definition:
 
-Shot represents a creative intention or visual idea. It is not a concrete image, video file or generated output. One Shot may later link to multiple prompts, assets and outputs as attempts to realize that intention. These links are not implemented in the Scenes & Shots v1 draft yet.
+Shot represents a creative intention or visual idea. It is not a concrete image, video file or generated output. One Shot may later link to multiple prompts, assets and outputs as attempts to realize that intention. These links are not implemented in Scenes & Shots v1 yet.
 
 ```json
 {
@@ -165,11 +167,23 @@ Shot represents a creative intention or visual idea. It is not a concrete image,
   "motifs": [],
   "notes": "",
   "status": "draft",
-  "order": 1
+  "order": 1,
+  "createdAt": "2026-06-06T10:00:00.000Z",
+  "updatedAt": "2026-06-06T10:00:00.000Z"
 }
 ```
 
-### Project -> Scene -> Shot Draft
+Allowed shot statuses in v1:
+
+```text
+draft
+approved
+used
+rejected
+archived
+```
+
+### Project -> Scene -> Shot
 
 ```text
 Project
@@ -187,7 +201,7 @@ Shots:
 - Prvá kvapka dopadne na prach
 ```
 
-This is a documentation draft only. It does not change `schemaVersion`, save/load logic or the current manifest writer.
+Scenes & Shots v1 keeps `schemaVersion` at 1. Older projects that do not have `scenes` or `shots` load these fields as empty arrays.
 
 ### Prompt
 
