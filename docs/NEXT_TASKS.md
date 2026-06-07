@@ -1,13 +1,20 @@
 # Next Tasks
 
-## Current Priority: Resizable Scenes And Shots Columns
+## Current Priority: Real Project Testing
 
-- Finish and test user-resizable columns in `Sceny a zabery`.
-- Allow the user to adjust scenes, shots, editor and right dock widths for large Windows monitors.
-- Store column widths in localStorage only.
+- Continue real testing with `Pradávny kód`.
+- Use the current Text & Timing, Project Overview and Scenes & Shots workflows in practice before adding larger modules.
+- Watch whether the shared right dock width, collapse state, tabs and overview behavior feel natural across modules.
+- Keep layout preferences in localStorage only.
 - Do not write layout preferences into `project.llstory.json`.
-- Keep the project dirty state unchanged while resizing panels.
-- Confirm that `Reset rozlozenia` restores default column widths and right dock state.
+- Keep the project dirty state unchanged while resizing panels or switching dock tabs.
+
+## Follow-Ups From Shared Right Dock Pass
+
+- Later consider a module-specific overview for `Text a časovanie`.
+- Later consider editor mode polish in `Scény a zábery` only if real project work shows it is needed.
+- Keep `Scény a zábery` overview as the current generated storyboard outline.
+- Keep `Projekty` overview as the compact project package summary.
 
 ## Vision: Lassi LAB Digital Atelier
 

@@ -78,6 +78,7 @@ type SceneShotEditorMode = "both" | "scene" | "shot";
 type RightDockState = {
   selectedTab: RightDockTab;
   collapsed: boolean;
+  width: number;
 };
 
 type ScenesShotsLayout = {
@@ -96,6 +97,8 @@ const SCENES_SHOTS_LAYOUT_STORAGE_KEY = "lassiLabStoryboard.scenesShotsLayout";
 const SCENE_SHOT_EDITOR_MODE_STORAGE_KEY = "lassiLabStoryboard.sceneShotEditorMode";
 const DRAFT_HISTORY_LIMIT = 40;
 const SCENE_EDITOR_MIN_WIDTH = 340;
+const DEFAULT_RIGHT_DOCK_WIDTH = 260;
+const rightDockWidthLimits = { min: 240, max: 560 };
 const defaultScenesShotsLayout: ScenesShotsLayout = {
   scenes: 280,
   shots: 360,
@@ -169,6 +172,7 @@ export default function App() {
   const [finalTextTimingCheck, setFinalTextTimingCheck] = useState<FinalTextTimingCheck | null>(null);
   const [rightDockTab, setRightDockTab] = useState<RightDockTab>(() => readRightDockState().selectedTab);
   const [isRightDockCollapsed, setIsRightDockCollapsed] = useState(() => readRightDockState().collapsed);
+  const [rightDockWidth, setRightDockWidth] = useState(() => readRightDockState().width);
   const [scenesShotsLayout, setScenesShotsLayout] = useState<ScenesShotsLayout>(() => readScenesShotsLayout());
   const [sceneShotEditorMode, setSceneShotEditorMode] = useState<SceneShotEditorMode>(() => readSceneShotEditorMode());
   const [sceneShotEditorWidth, setSceneShotEditorWidth] = useState(0);
@@ -180,7 +184,7 @@ export default function App() {
   const redoStackRef = useRef<DraftSnapshot[]>([]);
 
   const appShellStyle = {
-    "--right-dock-width": `${scenesShotsLayout.dock}px`,
+    "--right-dock-width": `${rightDockWidth}px`,
   } as React.CSSProperties & Record<string, string>;
   const scenesShotsSectionStyle = {
     "--scenes-column-width": `${scenesShotsLayout.scenes}px`,
@@ -249,6 +253,10 @@ export default function App() {
     [selectedSceneShots, selectedShotId],
   );
   const generatedTimingText = useMemo(() => buildExactTextFromTiming(timingDraft), [timingDraft]);
+  const projectOverview = useMemo(
+    () => buildProjectOverview(project, textDraft, timingDraft, sceneDraft, shotDraft, hasUnsavedProjectChanges),
+    [hasUnsavedProjectChanges, project, sceneDraft, shotDraft, textDraft, timingDraft],
+  );
   const scenesShotsOverview = useMemo(
     () => buildScenesShotsOverview(project?.title ?? "Bez otvoreného projektu", sceneDraft, shotDraft),
     [project?.title, sceneDraft, shotDraft],
@@ -317,8 +325,9 @@ export default function App() {
     writeRightDockState({
       selectedTab: rightDockTab,
       collapsed: isRightDockCollapsed,
+      width: rightDockWidth,
     });
-  }, [isRightDockCollapsed, rightDockTab]);
+  }, [isRightDockCollapsed, rightDockTab, rightDockWidth]);
 
   useEffect(() => {
     writeScenesShotsLayout(scenesShotsLayout);
@@ -346,7 +355,7 @@ export default function App() {
     const resizeObserver = new ResizeObserver(updateEditorWidth);
     resizeObserver.observe(editorPanel);
     return () => resizeObserver.disconnect();
-  }, [isRightDockCollapsed, scenesShotsLayout.dock, scenesShotsLayout.editor, scenesShotsLayout.scenes, scenesShotsLayout.shots, selectedSectionId]);
+  }, [isRightDockCollapsed, rightDockWidth, scenesShotsLayout.editor, scenesShotsLayout.scenes, scenesShotsLayout.shots, selectedSectionId]);
 
   useEffect(() => {
     if (!selectedTimingBlockId || selectedSectionId !== "text-timing") return;
@@ -399,6 +408,7 @@ export default function App() {
     setScenesShotsLayout(defaultScenesShotsLayout);
     setIsRightDockCollapsed(false);
     setRightDockTab("inspector");
+    setRightDockWidth(DEFAULT_RIGHT_DOCK_WIDTH);
     setSceneShotEditorMode("both");
     setStatusMessage("Rozloženie pracovnej plochy bolo resetované.");
   }
@@ -407,9 +417,15 @@ export default function App() {
     event.preventDefault();
     const startX = event.clientX;
     const startLayout = scenesShotsLayout;
+    const startRightDockWidth = rightDockWidth;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
+
+      if (kind === "right-dock") {
+        setRightDockWidth(clampRightDockWidth(startRightDockWidth - deltaX));
+        return;
+      }
 
       setScenesShotsLayout(() => {
         if (kind === "scenes-shots") {
@@ -443,10 +459,7 @@ export default function App() {
           });
         }
 
-        return normalizeScenesShotsLayout({
-          ...startLayout,
-          dock: startLayout.dock - deltaX,
-        });
+        return normalizeScenesShotsLayout(startLayout);
       });
     };
 
@@ -663,6 +676,20 @@ export default function App() {
     try {
       await navigator.clipboard.writeText(scenesShotsOverview);
       setStatusMessage("Prehľad scén a záberov bol skopírovaný do schránky.");
+    } catch {
+      setStatusMessage("Kopírovanie cez schránku nie je dostupné. Prehľad ostáva označiteľný ručne.");
+    }
+  }
+
+  async function handleCopyProjectOverview() {
+    if (!projectOverview.trim()) {
+      setStatusMessage("Prehľad zatiaľ neobsahuje text na kopírovanie.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(projectOverview);
+      setStatusMessage("Prehľad projektu bol skopírovaný do schránky.");
     } catch {
       setStatusMessage("Kopírovanie cez schránku nie je dostupné. Prehľad ostáva označiteľný ručne.");
     }
@@ -959,7 +986,7 @@ export default function App() {
                 </button>
               </>
             )}
-            {project && isScenesShotsWorkspace && (
+            {project && (isTextTimingWorkspace || isScenesShotsWorkspace) && (
               <button className="toolbar-secondary-button" onClick={handleResetScenesShotsLayout} type="button">
                 Reset rozloženia
               </button>
@@ -1830,14 +1857,12 @@ export default function App() {
           </button>
         ) : (
           <>
-            {isScenesShotsWorkspace && (
-              <div
-                aria-label="Zmeniť šírku pravého docku"
-                className="right-dock-resize-handle"
-                onMouseDown={(event) => handleStartScenesShotsResize("right-dock", event)}
-                role="separator"
-              />
-            )}
+            <div
+              aria-label="Zmeniť šírku pravého docku"
+              className="right-dock-resize-handle"
+              onMouseDown={(event) => handleStartScenesShotsResize("right-dock", event)}
+              role="separator"
+            />
             <div className="right-dock-top">
               <div className="right-dock-tabs" role="tablist" aria-label="Pravý dock">
                 <button
@@ -1868,17 +1893,37 @@ export default function App() {
               <section className="overview-panel" aria-label="Prehľad scén a záberov">
                 <div className="dock-context">
                   <strong>{project?.title ?? "Bez otvoreného projektu"}</strong>
-                  <span>Scény a zábery</span>
+                  <span>{selectedSection.label}</span>
                 </div>
-                <button
-                  className="secondary-button"
-                  disabled={!project || !scenesShotsOverview.trim()}
-                  onClick={() => { void handleCopyScenesShotsOverview(); }}
-                  type="button"
-                >
-                  Kopírovať prehľad
-                </button>
-                <pre className="overview-text">{scenesShotsOverview}</pre>
+                {showProjectOverview ? (
+                  <>
+                    <button
+                      className="secondary-button"
+                      disabled={!project || !projectOverview.trim()}
+                      onClick={() => { void handleCopyProjectOverview(); }}
+                      type="button"
+                    >
+                      Kopírovať prehľad
+                    </button>
+                    <pre className="overview-text">{projectOverview}</pre>
+                  </>
+                ) : isScenesShotsWorkspace ? (
+                  <>
+                    <button
+                      className="secondary-button"
+                      disabled={!project || !scenesShotsOverview.trim()}
+                      onClick={() => { void handleCopyScenesShotsOverview(); }}
+                      type="button"
+                    >
+                      Kopírovať prehľad
+                    </button>
+                    <pre className="overview-text">{scenesShotsOverview}</pre>
+                  </>
+                ) : (
+                  <div className="overview-placeholder">
+                    Prehľad pre tento modul ešte nie je dostupný.
+                  </div>
+                )}
               </section>
             ) : (
               <section className="inspector-panel" aria-label="Inšpektor">
@@ -2067,6 +2112,7 @@ function readRightDockState(): RightDockState {
     return {
       selectedTab: "inspector",
       collapsed: false,
+      width: DEFAULT_RIGHT_DOCK_WIDTH,
     };
   }
 
@@ -2076,6 +2122,7 @@ function readRightDockState(): RightDockState {
       return {
         selectedTab: "inspector",
         collapsed: false,
+        width: readScenesShotsLayout().dock,
       };
     }
 
@@ -2083,11 +2130,13 @@ function readRightDockState(): RightDockState {
     return {
       selectedTab: parsedValue.selectedTab === "overview" ? "overview" : "inspector",
       collapsed: Boolean(parsedValue.collapsed),
+      width: clampRightDockWidth(parsedValue.width ?? readScenesShotsLayout().dock),
     };
   } catch {
     return {
       selectedTab: "inspector",
       collapsed: false,
+      width: DEFAULT_RIGHT_DOCK_WIDTH,
     };
   }
 }
@@ -2096,7 +2145,13 @@ function writeRightDockState(state: RightDockState) {
   if (typeof window === "undefined") return;
 
   try {
-    window.localStorage.setItem(RIGHT_DOCK_STORAGE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(
+      RIGHT_DOCK_STORAGE_KEY,
+      JSON.stringify({
+        ...state,
+        width: clampRightDockWidth(state.width),
+      }),
+    );
   } catch {
     // Dock layout is only a local UI preference.
   }
@@ -2160,6 +2215,11 @@ function clampColumnWidth(value: unknown, column: keyof ScenesShotsLayout) {
   const numericValue = typeof value === "number" && Number.isFinite(value) ? value : defaultScenesShotsLayout[column];
   const limits = scenesShotsLayoutLimits[column];
   return Math.min(limits.max, Math.max(limits.min, Math.round(numericValue)));
+}
+
+function clampRightDockWidth(value: unknown) {
+  const numericValue = typeof value === "number" && Number.isFinite(value) ? value : DEFAULT_RIGHT_DOCK_WIDTH;
+  return Math.min(rightDockWidthLimits.max, Math.max(rightDockWidthLimits.min, Math.round(numericValue)));
 }
 
 function createEmptyTimingBlock(): TimingBlock {
@@ -2495,6 +2555,75 @@ function buildExactTextFromTiming(timing: TimingBlock[]) {
     .filter((block) => block.text.trim())
     .map((block) => block.text)
     .join("\n");
+}
+
+function buildProjectOverview(
+  project: ProjectPackage | null,
+  text: ProjectText,
+  timing: TimingBlock[],
+  scenes: Scene[],
+  shots: Shot[],
+  hasUnsavedChanges: boolean,
+) {
+  if (!project) {
+    return [
+      "Žiadny projekt nie je otvorený.",
+      "",
+      "Stav projektu",
+      "- Projektový balík nie je otvorený.",
+      "",
+      "Ďalšie kroky",
+      "- Vytvoriť alebo otvoriť projektový balík.",
+    ].join("\n");
+  }
+
+  const normalizedText = normalizeProjectText(text);
+  const normalizedTiming = normalizeTimingBlocks(timing);
+  const normalizedScenes = normalizeScenes(scenes);
+  const normalizedShots = normalizeShots(shots);
+  const textWordCount = countWords(normalizedText.body);
+  const nextStep = getProjectNextStep(textWordCount, normalizedTiming.length, normalizedScenes.length, normalizedShots.length);
+
+  return [
+    project.title,
+    "",
+    "Projekt",
+    `- ID projektu: ${project.projectId}`,
+    `- Priečinok projektu: ${project.folderPath}`,
+    `- Schéma manifestu: ${project.schemaVersion}`,
+    `- Vytvorené: ${formatDate(project.createdAt)}`,
+    `- Upravené: ${formatDate(project.updatedAt)}`,
+    "",
+    "Obsah",
+    `- Text: ${textWordCount} slov`,
+    `- Časové bloky: ${normalizedTiming.length}`,
+    `- Scény: ${normalizedScenes.length}`,
+    `- Zábery: ${normalizedShots.length}`,
+    `- Assety: ${project.counts.assets}`,
+    `- Prompty: ${project.counts.prompts}`,
+    `- Výstupy: ${project.counts.outputs}`,
+    "",
+    "Stav projektu",
+    "- Projektový balík je otvorený.",
+    `- Neuložené zmeny: ${hasUnsavedChanges ? "áno" : "nie"}`,
+    `- Naposledy uložené: ${formatDate(project.updatedAt)}`,
+    "",
+    "Ďalšie kroky",
+    `- ${nextStep}`,
+  ].join("\n");
+}
+
+function countWords(value: string) {
+  const trimmedValue = value.trim();
+  return trimmedValue ? trimmedValue.split(/\s+/).length : 0;
+}
+
+function getProjectNextStep(textWordCount: number, timingCount: number, sceneCount: number, shotCount: number) {
+  if (textWordCount === 0) return "Pridať text alebo importovať TXT/SRT.";
+  if (timingCount === 0) return "Doplniť časovanie.";
+  if (sceneCount === 0) return "Vytvoriť prvé scény.";
+  if (shotCount === 0) return "Doplniť zábery.";
+  return "Projekt má základnú storyboard štruktúru.";
 }
 
 function buildScenesShotsOverview(projectTitle: string, scenes: Scene[], shots: Shot[]) {

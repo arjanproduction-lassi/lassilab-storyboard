@@ -1261,7 +1261,7 @@ button:disabled {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -4px;
+  left: 0;
   z-index: 2;
   width: 8px;
   cursor: col-resize;
@@ -1424,6 +1424,16 @@ button:disabled {
   font-size: 0.78rem;
   line-height: 1.42;
   white-space: pre-wrap;
+}
+
+.overview-placeholder {
+  border: 1px solid #ded5c6;
+  border-radius: 6px;
+  padding: 9px;
+  color: #5f5a50;
+  background: #fffdf8;
+  font-size: 0.78rem;
+  line-height: 1.4;
 }
 
 .sync-tools {

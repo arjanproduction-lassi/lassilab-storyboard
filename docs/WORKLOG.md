@@ -184,3 +184,24 @@
 - No assets, prompts, outputs, thumbnails, timeline engine, audio playback, drag/drop import or AI generation were added.
 - `schemaVersion` remains `1`.
 - The next recommended step is testing the module on the real project `Pradávny kód` before adding links to timing/assets/prompts/outputs.
+
+## 2026-06-07
+
+### Shared Right Dock And Project Overview
+
+- Made the right dock reusable across modules as an app-level workspace panel.
+- The dock can be resized, collapsed and reopened outside of the `Sceny a zabery` module.
+- Dock tab, collapsed state and width are stored in localStorage only.
+- The `Projekty` module now has a generated read-only project overview in the `Prehlad` tab.
+- The project overview includes project identity, folder path, manifest schema, dates, text/timing/scenes/shots counts and basic asset/prompt/output counts.
+- The project overview includes a compact project status and a suggested next step based on the current package state.
+- `Sceny a zabery` keeps its generated scene/shot outline overview.
+- `Text a casovanie` and other modules may still show a placeholder until a dedicated module overview is useful.
+
+### Safety Notes
+
+- No manifest schema changes were made.
+- No save/load logic changes were made.
+- No backend/Tauri commands were added.
+- Dock layout state is not written to `project.llstory.json`.
+- Viewing, resizing or copying overview text does not mark the project dirty.
